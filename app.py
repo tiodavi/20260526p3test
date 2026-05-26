@@ -13,7 +13,7 @@ def get_db_connection():
     conn = psycopg2.connect(DATABASE_URL, sslmode='require')
     return conn
 
-# --- 前端 HTML 範本 (內嵌在單一檔案中，優化防錯與 UI 顯示) ---
+# --- 前端 HTML 範本 (內嵌在單一檔案中，新增顧客統計頁面與下拉選單篩選) ---
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="zh-TW">
@@ -30,6 +30,7 @@ HTML_TEMPLATE = """
         .sidebar a.active { background: #0d6efd; color: white; font-weight: bold; }
         .card { border: none; box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,0.075); border-radius: 10px; }
         .table th { font-weight: 600; background-color: #343a40 !important; color: white !important; }
+        .filter-container { display: none; background: #e9ecef; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
     </style>
 </head>
 <body>
@@ -41,6 +42,7 @@ HTML_TEMPLATE = """
                 </div>
                 <div class="mt-3">
                     <a href="#sales" id="menu-sales" onclick="loadData('sales')">📊 銷售流水帳</a>
+                    <a href="#customer-stats" id="menu-customer-stats" onclick="loadData('customer-stats')">📈 顧客消費統計</a>
                     <a href="#products" id="menu-products" onclick="loadData('products')">💻 商品母體資料</a>
                     <a href="#customers" id="menu-customers" onclick="loadData('customers')">👥 顧客客戶清單</a>
                 </div>
@@ -51,6 +53,14 @@ HTML_TEMPLATE = """
                     <h2 id="page-title" class="m-0">📊 銷售流水帳 (關聯查詢)</h2>
                     <span class="badge bg-success p-2">Neon 雲端連線正常</span>
                 </div>
+
+                <div id="filter-block" class="filter-container align-items-center gap-3">
+                    <label for="customer-select" class="form-label m-0 fw-bold text-secondary">🔍 篩選特定顧客：</label>
+                    <select id="customer-select" class="form-select" style="max-width: 300px;" onchange="filterCustomerStats()">
+                        <option value="ALL">-- 顯示所有顧客 --</option>
+                    </select>
+                </div>
+
                 <div class="card p-4 bg-white">
                     <div class="table-responsive">
                         <table class="table table-striped table-hover align-middle m-0" id="data-table">
@@ -67,6 +77,9 @@ HTML_TEMPLATE = """
     </div>
 
     <script>
+        // 全域變數，用來儲存統計資料以便前端抽樣篩選
+        let cachedStatsData = [];
+
         // 網頁載入完成後，自動讀取第一頁「銷售流水帳」
         document.addEventListener("DOMContentLoaded", function() {
             loadData('sales');
@@ -76,10 +89,19 @@ HTML_TEMPLATE = """
             const body = document.getElementById('table-body');
             const head = document.getElementById('table-head');
             const title = document.getElementById('page-title');
+            const filterBlock = document.getElementById('filter-block');
             
             // 切換側邊欄高亮狀態
             document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active'));
             document.getElementById(`menu-${type}`).classList.add('active');
+            
+            // 判斷是否顯示下拉選單控制列
+            if (type === 'customer-stats') {
+                filterBlock.style.display = 'flex';
+                initCustomerDropdown(); // 初始化顧客下拉選單
+            } else {
+                filterBlock.style.display = 'none';
+            }
             
             // 顯示載入中
             body.innerHTML = '<tr><td class="text-center py-4" colspan="10"><div class="spinner-border spinner-border-sm text-primary me-2"></div>讀取資料中，請稍候...</td></tr>';
@@ -94,33 +116,16 @@ HTML_TEMPLATE = """
                         return;
                     }
 
-                    // 1. 動態建立表頭 (讀取 JSON 物件的第一筆資料的所有鍵值)
-                    let headHtml = '<tr>';
-                    const keys = Object.keys(data[0]);
-                    keys.forEach(key => headHtml += `<th class="p-3">${key}</th>`);
-                    headHtml += '</tr>';
-                    head.innerHTML = headHtml;
+                    // 如果是統計頁面，先緩存起來給下拉選單篩選用
+                    if (type === 'customer-stats') {
+                        cachedStatsData = data;
+                    }
 
-                    // 2. 動態建立表身資料
-                    let bodyHtml = '';
-                    data.forEach(row => {
-                        bodyHtml += '<tr>';
-                        keys.forEach(key => {
-                            let value = row[key];
-                            // 格式化數值或日期（如果是數字則加上千分位，如果是空值則顯示橫線）
-                            if (typeof value === 'number' && key.includes('單價') || key.includes('金額')) {
-                                value = '$' + value.toLocaleString();
-                            } else if (value === null || value === undefined) {
-                                value = '-';
-                            }
-                            bodyHtml += `<td class="p-3">${value}</td>`;
-                        });
-                        bodyHtml += '</tr>';
-                    });
-                    body.innerHTML = bodyHtml;
+                    renderTable(data);
 
                     // 3. 根據點擊切換網頁大標題
                     if (type === 'sales') title.innerText = '📊 銷售流水帳 (關聯查詢)';
+                    if (type === 'customer-stats') title.innerText = '📈 顧客消費統計分析';
                     if (type === 'products') title.innerText = '💻 商品母體資料';
                     if (type === 'customers') title.innerText = '👥 顧客客戶清單';
                 })
@@ -129,25 +134,125 @@ HTML_TEMPLATE = """
                     body.innerHTML = `<tr><td class="text-center py-4 text-danger" colspan="10">❌ 遠端連線異常: ${err}</td></tr>`;
                 });
         }
+
+        // 渲染表格的共用邏輯
+        function renderTable(data) {
+            const head = document.getElementById('table-head');
+            const body = document.getElementById('table-body');
+
+            if (data.length === 0) {
+                body.innerHTML = '<tr><td class="text-center py-4 text-muted" colspan="10">沒有符合篩選條件的資料</td></tr>';
+                return;
+            }
+
+            // 1. 建立表頭
+            let headHtml = '<tr>';
+            const keys = Object.keys(data[0]);
+            keys.forEach(key => headHtml += `<th class="p-3">${key}</th>`);
+            headHtml += '</tr>';
+            head.innerHTML = headHtml;
+
+            // 2. 建立表身資料
+            let bodyHtml = '';
+            data.forEach(row => {
+                bodyHtml += '<tr>';
+                keys.forEach(key => {
+                    let value = row[key];
+                    // 格式化價格數值
+                    if (typeof value === 'number' && (key.includes('單價') || key.includes('金額') || key.includes('平均'))) {
+                        value = '$' + Math.round(value).toLocaleString(); // 四捨五入並加千分位
+                    } else if (value === null || value === undefined) {
+                        value = '-';
+                    }
+                    bodyHtml += `<td class="p-3">${value}</td>`;
+                });
+                bodyHtml += '</tr>';
+            });
+            body.innerHTML = bodyHtml;
+        }
+
+        // 初始化顧客下拉選單
+        function initCustomerDropdown() {
+            const select = document.getElementById('customer-select');
+            // 如果已經加載過選單，就不重複撈取
+            if (select.options.length > 1) return;
+
+            fetch('/api/customers')
+                .then(res => res.json())
+                .then(customers => {
+                    if (customers && !customers.error) {
+                        customers.forEach(c => {
+                            const opt = document.createElement('option');
+                            opt.value = c['顧客ID'];
+                            opt.innerHTML = `[ID: ${c['顧客ID']}] ${c['顧客名稱']}`;
+                            select.appendChild(opt);
+                        });
+                    }
+                });
+        }
+
+        // 下拉選單切換時的動態篩選
+        function filterCustomerStats() {
+            const selectedId = document.getElementById('customer-select').value;
+            if (selectedId === 'ALL') {
+                renderTable(cachedStatsData);
+            } else {
+                // 依據顧客ID進行前端動態過濾
+                const filtered = cachedStatsData.filter(row => row['顧客ID'].toString() === selectedId);
+                renderTable(filtered);
+            }
+        }
     </script>
 </body>
 </html>
 """
 
-# --- 路由與 API 設定 (完全對齊 Neon 雙引號 Schema) ---
+# --- 路由與 API 設定 ---
 
 @app.route('/')
 def index():
     """首頁：直接渲染前端 HTML 儀表板"""
     return render_template_string(HTML_TEMPLATE)
 
-@app.route('/api/sales')
-def get_sales():
-    """API: 取得銷售流水帳 (自動關聯商品、負責員工與顧客名稱)"""
+@app.route('/api/customer-stats')
+def get_customer_stats():
+    """
+    API: 核心分析功能
+    以「銷售資料」為核心，串聯商品與顧客資訊，依「顧客ID」分組，
+    統計出每位顧客購買商品的特定名稱（文字排序最大值 MAX）以及平均購買單價（AVG）
+    """
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        # 精確對齊資料庫中帶有雙引號的中文欄位名稱
+        
+        # 📊 關鍵 SQL：聚合函數搭配 GROUP BY
+        query = """
+            SELECT 
+                s."顧客ID",
+                c."顧客名稱",
+                MAX(p."商品名稱") AS "購買特定商品(文字最大值)",
+                AVG(p."銷售單價") AS "平均購買單價",
+                SUM(s."數量") AS "累積購買總數量"
+            FROM "銷售資料" s
+            LEFT JOIN "顧客清單" c ON s."顧客ID" = c."顧客ID"
+            LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID"
+            GROUP BY s."顧客ID", c."顧客名稱"
+            ORDER BY s."顧客ID" ASC;
+        """
+        cur.execute(query)
+        results = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": f"統計資料分析失敗，錯誤訊息：{str(e)}"}), 500
+
+@app.route('/api/sales')
+def get_sales():
+    """API: 取得銷售流水帳"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
         query = """
             SELECT 
                 s."傳票編號", s."分錄編號", s."處理日期",
@@ -198,5 +303,5 @@ def get_customers():
         return jsonify({"error": f"顧客資料讀取失敗：{str(e)}"}), 500
 
 if __name__ == '__main__':
-    # 本地測試環境執行 (Port 5000)
+    # 本地測試環境執行
     app.run(debug=True)
