@@ -13,7 +13,7 @@ def get_db_connection():
     conn = psycopg2.connect(DATABASE_URL, sslmode='require')
     return conn
 
-# --- 前端 HTML 範本 (內嵌在單一檔案中，新增顧客統計頁面與下拉選單篩選) ---
+# --- 前端 HTML 範本 (內嵌在單一檔案中) ---
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="zh-TW">
@@ -77,10 +77,8 @@ HTML_TEMPLATE = """
     </div>
 
     <script>
-        // 全域變數，用來儲存統計資料以便前端抽樣篩選
         let cachedStatsData = [];
 
-        // 網頁載入完成後，自動讀取第一頁「銷售流水帳」
         document.addEventListener("DOMContentLoaded", function() {
             loadData('sales');
         });
@@ -91,39 +89,33 @@ HTML_TEMPLATE = """
             const title = document.getElementById('page-title');
             const filterBlock = document.getElementById('filter-block');
             
-            // 切換側邊欄高亮狀態
             document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active'));
             document.getElementById(`menu-${type}`).classList.add('active');
             
-            // 判斷是否顯示下拉選單控制列
             if (type === 'customer-stats') {
                 filterBlock.style.display = 'flex';
-                initCustomerDropdown(); // 初始化顧客下拉選單
+                initCustomerDropdown();
             } else {
                 filterBlock.style.display = 'none';
             }
             
-            // 顯示載入中
             body.innerHTML = '<tr><td class="text-center py-4" colspan="10"><div class="spinner-border spinner-border-sm text-primary me-2"></div>讀取資料中，請稍候...</td></tr>';
 
             fetch(`/api/${type}`)
                 .then(res => res.json())
                 .then(data => {
-                    // 🛡️ 安全攔截：檢查後端是否報錯或資料為空
                     if (!data || data.error || data.length === 0) {
                         head.innerHTML = '';
                         body.innerHTML = `<tr><td class="text-center py-4 text-muted" colspan="10">⚠️ ${data.error || '目前資料庫內無任何資料'}</td></tr>`;
                         return;
                     }
 
-                    // 如果是統計頁面，先緩存起來給下拉選單篩選用
                     if (type === 'customer-stats') {
                         cachedStatsData = data;
                     }
 
                     renderTable(data);
 
-                    // 3. 根據點擊切換網頁大標題
                     if (type === 'sales') title.innerText = '📊 銷售流水帳 (關聯查詢)';
                     if (type === 'customer-stats') title.innerText = '📈 顧客消費統計分析';
                     if (type === 'products') title.innerText = '💻 商品母體資料';
@@ -135,7 +127,6 @@ HTML_TEMPLATE = """
                 });
         }
 
-        // 渲染表格的共用邏輯
         function renderTable(data) {
             const head = document.getElementById('table-head');
             const body = document.getElementById('table-body');
@@ -145,22 +136,26 @@ HTML_TEMPLATE = """
                 return;
             }
 
-            // 1. 建立表頭
             let headHtml = '<tr>';
             const keys = Object.keys(data[0]);
             keys.forEach(key => headHtml += `<th class="p-3">${key}</th>`);
             headHtml += '</tr>';
             head.innerHTML = headHtml;
 
-            // 2. 建立表身資料
             let bodyHtml = '';
             data.forEach(row => {
                 bodyHtml += '<tr>';
                 keys.forEach(key => {
                     let value = row[key];
-                    // 格式化價格數值
-                    if (typeof value === 'number' && (key.includes('單價') || key.includes('金額') || key.includes('平均'))) {
-                        value = '$' + Math.round(value).toLocaleString(); // 四捨五入並加千分位
+                    
+                    // ⭐ 前端進階格式化：只要欄位名稱包含價格相關關鍵字，就進行優化處理
+                    if (value !== null && value !== undefined && 
+                        (key.includes('單價') || key.includes('金額') || key.includes('平均'))) {
+                        // 轉換為浮點數並進行四捨五入，最後加上千分位與金錢符號
+                        const numValue = parseFloat(value);
+                        if (!isNaN(numValue)) {
+                            value = '$' + Math.round(numValue).toLocaleString();
+                        }
                     } else if (value === null || value === undefined) {
                         value = '-';
                     }
@@ -171,10 +166,8 @@ HTML_TEMPLATE = """
             body.innerHTML = bodyHtml;
         }
 
-        // 初始化顧客下拉選單
         function initCustomerDropdown() {
             const select = document.getElementById('customer-select');
-            // 如果已經加載過選單，就不重複撈取
             if (select.options.length > 1) return;
 
             fetch('/api/customers')
@@ -191,13 +184,11 @@ HTML_TEMPLATE = """
                 });
         }
 
-        // 下拉選單切換時的動態篩選
         function filterCustomerStats() {
             const selectedId = document.getElementById('customer-select').value;
             if (selectedId === 'ALL') {
                 renderTable(cachedStatsData);
             } else {
-                // 依據顧客ID進行前端動態過濾
                 const filtered = cachedStatsData.filter(row => row['顧客ID'].toString() === selectedId);
                 renderTable(filtered);
             }
@@ -211,27 +202,23 @@ HTML_TEMPLATE = """
 
 @app.route('/')
 def index():
-    """首頁：直接渲染前端 HTML 儀表板"""
+    """首頁"""
     return render_template_string(HTML_TEMPLATE)
 
 @app.route('/api/customer-stats')
 def get_customer_stats():
-    """
-    API: 核心分析功能
-    以「銷售資料」為核心，串聯商品與顧客資訊，依「顧客ID」分組，
-    統計出每位顧客購買商品的特定名稱（文字排序最大值 MAX）以及平均購買單價（AVG）
-    """
+    """API: 取得顧客消費統計分析"""
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        # 📊 關鍵 SQL：聚合函數搭配 GROUP BY
+        # ⭐ 關鍵修正：在 SQL 端直接使用 ROUND(..., 0) 將平均單價轉化為整數
         query = """
             SELECT 
                 s."顧客ID",
                 c."顧客名稱",
                 MAX(p."商品名稱") AS "購買特定商品(文字最大值)",
-                AVG(p."銷售單價") AS "平均購買單價",
+                ROUND(AVG(p."銷售單價"), 0) AS "平均購買單價",
                 SUM(s."數量") AS "累積購買總數量"
             FROM "銷售資料" s
             LEFT JOIN "顧客清單" c ON s."顧客ID" = c."顧客ID"
@@ -303,5 +290,4 @@ def get_customers():
         return jsonify({"error": f"顧客資料讀取失敗：{str(e)}"}), 500
 
 if __name__ == '__main__':
-    # 本地測試環境執行
     app.run(debug=True)
