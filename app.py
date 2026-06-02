@@ -1,5 +1,5 @@
 import os
-from flask import Flask, jsonify, render_template_string
+from flask import Flask, jsonify, render_template_string, request
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
@@ -35,7 +35,7 @@ HTML_TEMPLATE = """
         .kpi-card { border-left: 5px solid #0d6efd; }
         .kpi-title { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; color: #6c757d; }
         .kpi-value { font-size: 1.6rem; font-weight: 700; color: #343a40; }
-        .chart-container { position: relative; height: 280px; width: 100%; display: flex; justify-content: center; align-items: center; }
+        .chart-container { position: relative; height: 260px; width: 100%; display: flex; justify-content: center; align-items: center; }
     </style>
 </head>
 <body>
@@ -47,7 +47,11 @@ HTML_TEMPLATE = """
                 </div>
                 <div class="mt-3">
                     <a href="#dashboard" id="menu-dashboard" onclick="loadData('dashboard')">🏠 營運儀表板</a>
-                    <a href="#customer-loyalty" id="menu-customer-loyalty" onclick="loadData('customer-loyalty')">🏆 客戶忠誠分析</a>
+                    <a href="#sales-ranking" id="menu-sales-ranking" onclick="loadData('sales-ranking')">🏅 業務業績排行</a>
+                    <a href="#customer-ranking" id="menu-customer-ranking" onclick="loadData('customer-ranking')">🏆 顧客貢獻排行</a>
+                    <a href="#customer-loyalty" id="menu-customer-loyalty" onclick="loadData('customer-loyalty')">💎 客戶忠誠分析</a>
+                    <a href="#sales-by-date" id="menu-sales-by-date" onclick="loadData('sales-by-date')">📅 區間銷售流水</a>
+                    <a href="#sales-by-group" id="menu-sales-by-group" onclick="loadData('sales-by-group')">💻 商品群組銷貨</a>
                     <a href="#sales" id="menu-sales" onclick="loadData('sales')">📊 銷售流水帳</a>
                     <a href="#customer-stats" id="menu-customer-stats" onclick="loadData('customer-stats')">📈 顧客消費統計</a>
                     <a href="#products" id="menu-products" onclick="loadData('products')">💻 商品母體資料</a>
@@ -100,26 +104,48 @@ HTML_TEMPLATE = """
                     </div>
                 </div>
 
-                <div id="dashboard-chart-block" class="row g-4 mb-4 d-none">
-                    <div class="col-md-6">
-                        <div class="card p-4 bg-white text-center h-100">
-                            <h5 class="text-secondary mb-3">🍕 Top 5 商品毛利貢獻佔比 (圓餅圖)</h5>
+                <div id="dashboard-chart-block" class="row g-3 mb-4 d-none">
+                    <div class="col-md-4">
+                        <div class="card p-3 bg-white text-center h-100">
+                            <h6 class="text-secondary mb-2">🍕 Top 5 商品毛利貢獻佔比</h6>
                             <div class="chart-container">
                                 <canvas id="profitPieChart"></canvas>
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-6">
-                        <div class="card p-4 bg-white text-center h-100">
-                            <h5 class="text-secondary mb-3">📊 Top 5 回購顧客次數排行 (長條圖)</h5>
+                    <div class="col-md-4">
+                        <div class="card p-3 bg-white text-center h-100">
+                            <h6 class="text-secondary mb-2">🏢 Top 5 顧客消費金額排行</h6>
                             <div class="chart-container">
-                                <canvas id="loyaltyBarChart"></canvas>
+                                <canvas id="customerBarChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card p-3 bg-white text-center h-100">
+                            <h6 class="text-secondary mb-2">🏅 業務員銷售總額 PK 排行</h6>
+                            <div class="chart-container">
+                                <canvas id="salesBarChart"></canvas>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <div id="filter-block" class="filter-container align-items-center gap-3">
+                <div id="filter-block-date" class="filter-container align-items-center gap-3" style="display: none;">
+                    <label for="start-date" class="form-label m-0 fw-bold text-secondary">📅 開始日期：</label>
+                    <input type="date" id="start-date" class="form-control" style="max-width: 200px;" value="2021-05-01">
+                    <label for="end-date" class="form-label m-0 fw-bold text-secondary">📅 結束日期：</label>
+                    <input type="date" id="end-date" class="form-control" style="max-width: 200px;" value="2021-05-31">
+                    <button class="btn btn-primary fw-bold" onclick="fetchSalesByDate()">🔍 篩選區間明細</button>
+                </div>
+
+                <div id="filter-block-group" class="filter-container align-items-center gap-3" style="display: none;">
+                    <label for="group-name-select" class="form-label m-0 fw-bold text-secondary">🔍 選擇商品群組：</label>
+                    <select id="group-name-select" class="form-select" style="max-width: 300px;" onchange="fetchSalesByGroup()">
+                    </select>
+                </div>
+
+                <div id="filter-block" class="filter-container align-items-center gap-3" style="display: none;">
                     <label for="customer-select" class="form-label m-0 fw-bold text-secondary">🔍 篩選特定顧客：</label>
                     <select id="customer-select" class="form-select" style="max-width: 300px;" onchange="filterCustomerStats()">
                         <option value="ALL">-- 顯示所有顧客 --</option>
@@ -145,7 +171,8 @@ HTML_TEMPLATE = """
     <script>
         let cachedStatsData = [];
         let profitChartInstance = null;
-        let loyaltyChartInstance = null;
+        let customerChartInstance = null;
+        let salesChartInstance = null;
 
         document.addEventListener("DOMContentLoaded", function() {
             loadData('dashboard');
@@ -157,18 +184,22 @@ HTML_TEMPLATE = """
             const title = document.getElementById('page-title');
             const tableTitle = document.getElementById('table-title');
             const filterBlock = document.getElementById('filter-block');
+            const filterBlockGroup = document.getElementById('filter-block-group');
+            const filterBlockDate = document.getElementById('filter-block-date');
             const dashboardCards = document.getElementById('dashboard-cards');
             const chartBlock = document.getElementById('dashboard-chart-block');
             
             document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active'));
             document.getElementById(`menu-${type}`).classList.add('active');
             
-            if (type === 'customer-stats') {
-                filterBlock.style.display = 'flex';
-                initCustomerDropdown();
-            } else {
-                filterBlock.style.display = 'none';
-            }
+            // 控管篩選區塊顯示
+            filterBlock.style.display = (type === 'customer-stats') ? 'flex' : 'none';
+            if (type === 'customer-stats') initCustomerDropdown();
+
+            filterBlockGroup.style.display = (type === 'sales-by-group') ? 'flex' : 'none';
+            if (type === 'sales-by-group') initGroupNameDropdown();
+
+            filterBlockDate.style.display = (type === 'sales-by-date') ? 'flex' : 'none';
 
             if (type === 'dashboard') {
                 dashboardCards.style.display = 'flex';
@@ -199,7 +230,8 @@ HTML_TEMPLATE = """
                         document.getElementById('kpi-total-customers').innerText = data.kpi.total_customers + ' 人';
                         
                         renderProfitPieChart(data.top_products);
-                        renderLoyaltyBarChart(data.top_loyal_customers);
+                        renderCustomerBarChart(data.top_customers);
+                        renderSalesBarChart(data.top_sales);
                         renderTable(data.top_products);
                     })
                     .catch(err => {
@@ -208,21 +240,33 @@ HTML_TEMPLATE = """
                 return;
             }
 
-            // 處理新增的客戶忠誠分析選單切換
+            if (type === 'sales-by-group') { fetchSalesByGroup(); return; }
+            if (type === 'sales-by-date') { fetchSalesByDate(); return; }
+
+            // 調用顧客排行榜 API
+            if (type === 'customer-ranking') {
+                fetch('/api/customer-ranking').then(res => res.json()).then(data => {
+                    title.innerText = '🏆 顧客貢獻度排行榜 (VVIP 總覽)';
+                    renderTable(data);
+                });
+                return;
+            }
+
+            // 調用業務排行榜 API
+            if (type === 'sales-ranking') {
+                fetch('/api/sales-ranking').then(res => res.json()).then(data => {
+                    title.innerText = '🏅 業務員業績排行榜 (Top Sales)';
+                    renderTable(data);
+                });
+                return;
+            }
+
+            // 新增：調用客戶活躍與忠誠度分析表 API
             if (type === 'customer-loyalty') {
-                fetch('/api/customer-loyalty')
-                    .then(res => res.json())
-                    .then(data => {
-                        if (data.error) {
-                            body.innerHTML = `<tr><td class="text-center py-4 text-danger" colspan="10">❌ 載入失敗: ${data.error}</td></tr>`;
-                            return;
-                        }
-                        title.innerText = '🏆 客戶活躍度與忠誠度分析表';
-                        renderTable(data);
-                    })
-                    .catch(err => {
-                        body.innerHTML = `<tr><td class="text-center py-4 text-danger" colspan="10">❌ 遠端連線異常: ${err}</td></tr>`;
-                    });
+                fetch('/api/customer-loyalty').then(res => res.json()).then(data => {
+                    title.innerText = '🏆 客戶活躍度與忠誠度分析表 (含零消費客戶)';
+                    renderTable(data);
+                });
                 return;
             }
 
@@ -235,10 +279,7 @@ HTML_TEMPLATE = """
                         return;
                     }
 
-                    if (type === 'customer-stats') {
-                        cachedStatsData = data;
-                    }
-
+                    if (type === 'customer-stats') cachedStatsData = data;
                     renderTable(data);
 
                     if (type === 'sales') title.innerText = '📊 銷售流水帳 (關聯查詢)';
@@ -252,69 +293,120 @@ HTML_TEMPLATE = """
                 });
         }
 
+        function initGroupNameDropdown() {
+            const select = document.getElementById('group-name-select');
+            if (select.options.length > 0) return;
+            const allOpt = document.createElement('option');
+            allOpt.value = 'ALL'; allOpt.innerHTML = '-- 顯示所有商品群組 --';
+            select.appendChild(allOpt);
+
+            fetch('/api/products')
+                .then(res => res.json())
+                .then(products => {
+                    if (products && !products.error) {
+                        const groups = [...new Set(products.map(p => p['群組名稱']))].filter(Boolean);
+                        groups.forEach(g => {
+                            const opt = document.createElement('option');
+                            opt.value = g; opt.innerHTML = g;
+                            if (g === '電腦主機') opt.selected = true;
+                            select.appendChild(opt);
+                        });
+                    }
+                });
+        }
+
+        function fetchSalesByGroup() {
+            const select = document.getElementById('group-name-select');
+            const groupName = select.value || '電腦主機';
+            const title = document.getElementById('page-title');
+            const body = document.getElementById('table-body');
+            const head = document.getElementById('table-head');
+
+            title.innerText = (groupName === 'ALL') ? '💻 商品群組銷貨 - 全總覽' : `💻 商品群組銷貨 - ${groupName}`;
+            body.innerHTML = '<tr><td class="text-center py-4" colspan="10"><div class="spinner-border spinner-border-sm text-primary me-2"></div>查詢中...</td></tr>';
+
+            fetch(`/api/sales-by-group?group_name=${encodeURIComponent(groupName)}`)
+                .then(res => res.json()).then(data => {
+                    if (!data || data.error || data.length === 0) {
+                        head.innerHTML = ''; body.innerHTML = `<tr><td class="text-center py-4 text-muted" colspan="10">⚠️ 此群組尚無销售明細</td></tr>`;
+                        return;
+                    }
+                    renderTable(data);
+                });
+        }
+
+        function fetchSalesByDate() {
+            const startDate = document.getElementById('start-date').value;
+            const endDate = document.getElementById('end-date').value;
+            const title = document.getElementById('page-title');
+            const body = document.getElementById('table-body');
+            const head = document.getElementById('table-head');
+
+            title.innerText = `📅 區間銷售流水 [${startDate} ~ ${endDate}]`;
+            body.innerHTML = '<tr><td class="text-center py-4" colspan="10"><div class="spinner-border spinner-border-sm text-primary me-2"></div>讀取區間數據中...</td></tr>';
+
+            fetch(`/api/sales-by-date?start=${startDate}&end=${endDate}`)
+                .then(res => res.json()).then(data => {
+                    if (!data || data.error || data.length === 0) {
+                        head.innerHTML = ''; body.innerHTML = `<tr><td class="text-center py-4 text-muted" colspan="10">⚠️ 此時間區間內無銷售資料</td></tr>`;
+                        return;
+                    }
+                    renderTable(data);
+                });
+        }
+
         function renderProfitPieChart(productsData) {
             const ctx = document.getElementById('profitPieChart').getContext('2d');
-            if (profitChartInstance) { profitChartInstance.destroy(); }
-
+            if (profitChartInstance) profitChartInstance.destroy();
             const labels = productsData.map(item => item['商品名稱']);
             const profits = productsData.map(item => item['總創造毛利']);
-
             profitChartInstance = new Chart(ctx, {
                 type: 'pie',
                 data: {
                     labels: labels,
-                    datasets: [{
-                        label: '總創造毛利',
-                        data: profits,
-                        backgroundColor: ['#0d6efd', '#6f42c1', '#fd7e14', '#198754', '#ffc107'],
-                        hoverOffset: 15
-                    }]
+                    datasets: [{ data: profits, backgroundColor: ['#0d6efd', '#6f42c1', '#fd7e14', '#198754', '#ffc107'], hoverOffset: 10 }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+        }
+
+        function renderCustomerBarChart(customersData) {
+            const ctx = document.getElementById('customerBarChart').getContext('2d');
+            if (customerChartInstance) customerChartInstance.destroy();
+            const labels = customersData.map(item => item['顧客名稱']);
+            const totals = customersData.map(item => item['總金額']);
+            customerChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{ label: '消費額', data: totals, backgroundColor: '#6f42c1', borderRadius: 4 }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: {
-                        legend: { position: 'right', labels: { font: { size: 12 } } }
-                    }
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true } }
                 }
             });
         }
 
-        // 新增：繪製首頁忠誠客戶回購長條圖
-        function renderLoyaltyBarChart(customerData) {
-            const ctx = document.getElementById('loyaltyBarChart').getContext('2d');
-            if (loyaltyChartInstance) { loyaltyChartInstance.destroy(); }
-
-            // 過濾掉購買次數為 0 的客戶不放入首頁前五大排行圖表
-            const activeCustomers = customerData.filter(item => item['訂單筆數'] > 0).slice(0, 5);
-
-            const labels = activeCustomers.map(item => item['顧客名稱']);
-            const counts = activeCustomers.map(item => item['訂單筆數']);
-
-            loyaltyChartInstance = new Chart(ctx, {
+        function renderSalesBarChart(salesData) {
+            const ctx = document.getElementById('salesBarChart').getContext('2d');
+            if (salesChartInstance) salesChartInstance.destroy();
+            const labels = salesData.map(item => item['負責人姓名']);
+            const totals = salesData.map(item => item['銷售總額']);
+            salesChartInstance = new Chart(ctx, {
                 type: 'bar',
                 data: {
                     labels: labels,
-                    datasets: [{
-                        label: '回購訂單筆數',
-                        data: counts,
-                        backgroundColor: '#6f42c1',
-                        borderRadius: 5,
-                        borderWidth: 1
-                    }]
+                    datasets: [{ label: '銷售總額', data: totals, backgroundColor: '#198754', borderRadius: 4 }]
                 },
                 options: {
+                    indexAxis: 'y',
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: { stepSize: 1 } // 訂單筆數必為整數
-                        }
-                    }
+                    plugins: { legend: { display: false } },
+                    scales: { x: { beginAtZero: true } }
                 }
             });
         }
@@ -322,7 +414,6 @@ HTML_TEMPLATE = """
         function renderTable(data) {
             const head = document.getElementById('table-head');
             const body = document.getElementById('table-body');
-
             if (data.length === 0) {
                 body.innerHTML = '<tr><td class="text-center py-4 text-muted" colspan="10">沒有符合篩選條件的資料</td></tr>';
                 return;
@@ -339,21 +430,11 @@ HTML_TEMPLATE = """
                 bodyHtml += '<tr>';
                 keys.forEach(key => {
                     let value = row[key];
-                    
                     if (value !== null && value !== undefined && 
-                        (key.includes('單價') || key.includes('金額') || key.includes('平均') || key.includes('銷售額') || key.includes('毛利'))) {
-                        
-                        if (key.includes('率')) {
-                            value = parseFloat(value).toFixed(1) + '%';
-                        } else {
-                            const numValue = parseFloat(value);
-                            if (!isNaN(numValue)) {
-                                value = '$' + Math.round(numValue).toLocaleString();
-                            }
-                        }
-                    } else if (value === null || value === undefined) {
-                        value = '-';
-                    }
+                        (key.includes('單價') || key.includes('金額') || key.includes('平均') || key.includes('銷售額') || key.includes('毛利') || key.includes('總額'))) {
+                        if (key.includes('率')) { value = parseFloat(value).toFixed(1) + '%'; }
+                        else { const numValue = parseFloat(value); if (!isNaN(numValue)) value = '$' + Math.round(numValue).toLocaleString(); }
+                    } else if (value === null || value === undefined) { value = '-'; }
                     bodyHtml += `<td class="p-3">${value}</td>`;
                 });
                 bodyHtml += '</tr>';
@@ -364,29 +445,21 @@ HTML_TEMPLATE = """
         function initCustomerDropdown() {
             const select = document.getElementById('customer-select');
             if (select.options.length > 1) return;
-
-            fetch('/api/customers')
-                .then(res => res.json())
-                .then(customers => {
-                    if (customers && !customers.error) {
-                        customers.forEach(c => {
-                            const opt = document.createElement('option');
-                            opt.value = c['顧客ID'];
-                            opt.innerHTML = `[ID: ${c['顧客ID']}] ${c['顧客名稱']}`;
-                            select.appendChild(opt);
-                        });
-                    }
-                });
+            fetch('/api/customers').then(res => res.json()).then(customers => {
+                if (customers && !customers.error) {
+                    customers.forEach(c => {
+                        const opt = document.createElement('option');
+                        opt.value = c['顧客ID']; opt.innerHTML = `[ID: ${c['顧客ID']}] ${c['顧客名稱']}`;
+                        select.appendChild(opt);
+                    });
+                }
+            });
         }
 
         function filterCustomerStats() {
             const selectedId = document.getElementById('customer-select').value;
-            if (selectedId === 'ALL') {
-                renderTable(cachedStatsData);
-            } else {
-                const filtered = cachedStatsData.filter(row => row['顧客ID'].toString() === selectedId);
-                renderTable(filtered);
-            }
+            if (selectedId === 'ALL') { renderTable(cachedStatsData); }
+            else { renderTable(cachedStatsData.filter(row => row['顧客ID'].toString() === selectedId)); }
         }
     </script>
 </body>
@@ -402,12 +475,10 @@ def index():
 
 @app.route('/api/customer-loyalty')
 def get_customer_loyalty():
-    """API: 新增功能 - 客戶活躍度與忠誠度分析表 (完全採用 LEFT JOIN 邏輯)"""
+    """API: 全新整合功能 - 客戶活躍度與忠誠度分析表 (使用 LEFT JOIN)"""
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        
-        # 完完全全對齊你要求的 SQL 指令，配合 PostgreSQL 補上大寫雙引號
         query = """
             SELECT
                 c."顧客名稱",
@@ -424,74 +495,149 @@ def get_customer_loyalty():
         conn.close()
         return jsonify(results)
     except Exception as e:
-        return jsonify({"error": f"客戶活躍與忠誠度數據抓取失敗，錯誤訊息：{str(e)}"}), 500
+        return jsonify({"error": f"客戶活躍與忠誠度數據抓取失敗：{str(e)}"}), 500
 
-@app.route('/api/dashboard-stats')
-def get_dashboard_stats():
-    """API: 取得儀表板 KPI 與商品利潤排行 (同步抽取前五大忠誠客戶供首頁繪圖)"""
+@app.route('/api/sales-ranking')
+def get_sales_ranking():
+    """API: 業務員銷售業績排行榜"""
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        
-        # 1. 查詢 KPI 核心指標
+        query = """
+            SELECT
+                e."負責人姓名",
+                COUNT(*) AS "訂單筆數",
+                SUM(p."銷售單價" * s."數量") AS "銷售總額"
+            FROM "銷售資料" AS s
+            INNER JOIN "負責人清單" AS e ON s."負責人ID" = e."負責人ID"
+            INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
+            GROUP BY e."負責人ID", e."負責人姓名"
+            ORDER BY "銷售總額" DESC;
+        """
+        cur.execute(query)
+        results = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": f"業務員銷售業績排行榜抓取失敗：{str(e)}"}), 500
+
+@app.route('/api/customer-ranking')
+def get_customer_ranking():
+    """API: 顧客累積消費金額排行 (VVIP 排行榜)"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        query = """
+            SELECT c."顧客名稱", COUNT(*) AS "訂單筆數", SUM(p."銷售單價" * s."數量") AS "總金額"
+            FROM "銷售資料" AS s
+            INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
+            INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID"
+            GROUP BY c."顧客ID", c."顧客名稱" ORDER BY "總金額" DESC;
+        """
+        cur.execute(query)
+        results = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": f"顧客貢獻排行榜數據拉取失敗：{str(e)}"}), 500
+
+@app.route('/api/sales-by-group')
+def get_sales_by_group():
+    """API: 依據商品群組查詢銷售明細"""
+    group_name = request.args.get('group_name', '電腦主機')
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        if group_name == 'ALL':
+            query = """
+                SELECT s."傳票編號", s."處理日期" AS "處理日", p."商品名稱", p."群組名稱", c."顧客名稱", s."數量"
+                FROM "銷售資料" AS s INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID" INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID" ORDER BY s."處理日期" ASC;
+            """
+            cur.execute(query)
+        else:
+            query = """
+                SELECT s."傳票編號", s."處理日期" AS "處理日", p."商品名稱", p."群組名稱", c."顧客名稱", s."數量"
+                FROM "銷售資料" AS s INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID" INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID" WHERE p."群組名稱" = %s ORDER BY s."處理日期" ASC;
+            """
+            cur.execute(query, (group_name,))
+        results = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": f"商品群組明細查詢失敗：{str(e)}"}), 500
+
+@app.route('/api/sales-by-date')
+def get_sales_by_date():
+    """API: 根據日期區間撈取報表"""
+    start_date = request.args.get('start', '2021-05-01')
+    end_date = request.args.get('end', '2021-05-31')
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        query = """
+            SELECT s."傳票編號", s."處理日期" AS "處理日", p."商品名稱", e."負責人姓名", c."顧客名稱", s."數量"
+            FROM "銷售資料" AS s
+            INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
+            INNER JOIN "負責人清單" AS e ON s."負責人ID" = e."負責人ID"
+            INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID"
+            WHERE s."處理日期" BETWEEN %s AND %s ORDER BY s."處理日期" ASC;
+        """
+        cur.execute(query, (start_date, end_date))
+        results = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": f"日期區間銷售流水抓取失敗：{str(e)}"}), 500
+
+@app.route('/api/dashboard-stats')
+def get_dashboard_stats():
+    """API: 綜合計算儀表板核心指標與首頁三大圖表數據"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
         kpi_query = """
             SELECT 
                 COALESCE(SUM(p."銷售單價" * s."數量"), 0) AS total_sales,
                 COALESCE(SUM((p."銷售單價" - p."進貨單價") * s."數量"), 0) AS total_profit,
-                CASE 
-                    WHEN SUM(p."銷售單價" * s."數量") > 0 
-                    THEN ROUND((SUM((p."銷售單價" - p."進貨單價") * s."數量") * 100.0 / SUM(p."銷售單價" * s."數量")), 1)
-                    ELSE 0 
-                END AS margin_rate,
-                COALESCE(SUM(s."數量"), 0) AS total_qty,
-                COUNT(DISTINCT s."顧客ID") AS total_customers,
-                CASE 
-                    WHEN COUNT(DISTINCT s."傳票編號") > 0 
-                    THEN COALESCE(SUM(p."銷售單價" * s."數量"), 0) / COUNT(DISTINCT s."傳票編號")
-                    ELSE 0 
-                END AS avg_order_value
-            FROM "銷售資料" s
-            LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID";
+                CASE WHEN SUM(p."銷售單價" * s."數量") > 0 THEN ROUND((SUM((p."銷售單價" - p."進貨單價") * s."數量") * 100.0 / SUM(p."銷售單價" * s."數量")), 1) ELSE 0 END AS margin_rate,
+                COALESCE(SUM(s."數量"), 0) AS total_qty, COUNT(DISTINCT s."顧客ID") AS total_customers,
+                CASE WHEN COUNT(DISTINCT s."傳票編號") > 0 THEN COALESCE(SUM(p."銷售單價" * s."數量"), 0) / COUNT(DISTINCT s."傳票編號") ELSE 0 END AS avg_order_value
+            FROM "銷售資料" s LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID";
         """
         cur.execute(kpi_query)
         kpi_result = cur.fetchone()
 
-        # 2. 查詢 Top 5 高毛利商品排行
         top_products_query = """
-            SELECT 
-                p."商品名稱",
-                SUM(s."數量") AS "總銷售數量",
-                SUM(p."銷售單價" * s."數量") AS "總銷售額",
-                SUM((p."銷售單價" - p."進貨單價") * s."數量") AS "總創造毛利",
-                ROUND((SUM((p."銷售單價" - p."進貨單價") * s."數量") * 100.0 / NULLIF(SUM(p."銷售單價" * s."數量"), 0)), 1) AS "單品毛利率"
-            FROM "銷售資料" s
-            LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID"
-            GROUP BY p."商品名稱"
-            ORDER BY "總創造毛利" DESC
-            LIMIT 5;
+            SELECT p."商品名稱", SUM(s."數量") AS "總銷售數量", SUM(p."銷售單價" * s."數量") AS "總銷售額", SUM((p."銷售單價" - p."進貨單價") * s."數量") AS "總創造毛利",
+                   ROUND((SUM((p."銷售單價" - p."進貨單價") * s."數量") * 100.0 / NULLIF(SUM(p."銷售單價" * s."數量"), 0)), 1) AS "單品毛利率"
+            FROM "銷售資料" s LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID" GROUP BY p."商品名稱" ORDER BY "總創造毛利" DESC LIMIT 5;
         """
         cur.execute(top_products_query)
         top_products = cur.fetchall()
 
-        # 3. 額外查詢忠誠客戶數據 (用來渲染首頁右側的 Bar Chart)
-        loyalty_query = """
-            SELECT c."顧客名稱", COUNT(s."傳票編號") AS "訂單筆數"
-            FROM "顧客清單" AS c
-            LEFT JOIN "銷售資料" AS s ON c."顧客ID" = s."顧客ID"
-            GROUP BY c."顧客ID", c."顧客名稱"
-            ORDER BY "訂單筆數" DESC LIMIT 5;
+        top_customers_query = """
+            SELECT c."顧客名稱", SUM(p."銷售單價" * s."數量") AS "總金額"
+            FROM "銷售資料" s INNER JOIN "商品清單" p ON s."商品ID" = p."商品ID" INNER JOIN "顧客清單" c ON s."顧客ID" = c."顧客ID"
+            GROUP BY c."顧客ID", c."顧客名稱" ORDER BY "總金額" DESC LIMIT 5;
         """
-        cur.execute(loyalty_query)
-        top_loyal_customers = cur.fetchall()
-        
+        cur.execute(top_customers_query)
+        top_customers = cur.fetchall()
+
+        top_sales_query = """
+            SELECT e."負責人姓名", SUM(p."銷售單價" * s."數量") AS "銷售總額"
+            FROM "銷售資料" s INNER JOIN "負責人清單" e ON s."負責人ID" = e."負責人ID" INNER JOIN "商品清單" p ON s."商品ID" = p."商品ID"
+            GROUP BY e."負責人ID", e."負責人姓名" ORDER BY "銷售總額" DESC LIMIT 5;
+        """
+        cur.execute(top_sales_query)
+        top_sales = cur.fetchall()
+
         cur.close()
         conn.close()
-        
-        return jsonify({
-            "kpi": kpi_result,
-            "top_products": top_products,
-            "top_loyal_customers": top_loyal_customers
-        })
+        return jsonify({"kpi": kpi_result, "top_products": top_products, "top_customers": top_customers, "top_sales": top_sales})
     except Exception as e:
         return jsonify({"error": f"儀表板數據統計失敗，錯誤訊息：{str(e)}"}), 500
 
@@ -502,17 +648,8 @@ def get_customer_stats():
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         query = """
-            SELECT 
-                s."顧客ID",
-                c."顧客名稱",
-                MAX(p."商品名稱") AS "購買特定商品(文字最大值)",
-                ROUND(AVG(p."銷售單價"), 0) AS "平均購買單價",
-                SUM(s."數量") AS "累積購買總數量"
-            FROM "銷售資料" s
-            LEFT JOIN "顧客清單" c ON s."顧客ID" = c."顧客ID"
-            LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID"
-            GROUP BY s."顧客ID", c."顧客名稱"
-            ORDER BY s."顧客ID" ASC;
+            SELECT s."顧客ID", c."顧客名稱", MAX(p."商品名稱") AS "購買特定商品(文字最大值)", ROUND(AVG(p."銷售單價"), 0) AS "平均購買單價", SUM(s."數量") AS "累積購買總數量"
+            FROM "銷售資料" s LEFT JOIN "顧客清單" c ON s."顧客ID" = c."顧客ID" LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID" GROUP BY s."顧客ID", c."顧客名稱" ORDER BY s."顧客ID" ASC;
         """
         cur.execute(query)
         results = cur.fetchall()
@@ -529,16 +666,8 @@ def get_sales():
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         query = """
-            SELECT 
-                s."傳票編號", s."分錄編號", s."處理日期",
-                p."商品名稱", p."銷售單價", s."數量",
-                (p."銷售單價" * s."數量") AS "總金額",
-                e."負責人姓名" AS "經辦員工",
-                c."顧客名稱" AS "客戶名稱"
-            FROM "銷售資料" s
-            LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID"
-            LEFT JOIN "負責人清單" e ON s."負責人ID" = e."負責人ID"
-            LEFT JOIN "顧客清單" c ON s."顧客ID" = c."顧客ID"
+            SELECT s."傳票編號", s."分錄編號", s."處理日期", p."商品名稱", p."銷售單價", s."數量", (p."銷售單價" * s."數量") AS "總金額", e."負責人姓名" AS "經辦員工", c."顧客名稱" AS "客戶名稱"
+            FROM "銷售資料" s LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID" LEFT JOIN "負責人清單" e ON s."負責人ID" = e."負責人ID" LEFT JOIN "顧客清單" c ON s."顧客ID" = c."顧客ID"
             ORDER BY s."處理日期" DESC, s."傳票編號" ASC;
         """
         cur.execute(query)
