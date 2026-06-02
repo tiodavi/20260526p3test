@@ -47,11 +47,12 @@ HTML_TEMPLATE = """
                 </div>
                 <div class="mt-3">
                     <a href="#dashboard" id="menu-dashboard" onclick="loadData('dashboard')">🏠 營運儀表板</a>
+                    <a href="#customer-ranking" id="menu-customer-ranking" onclick="loadData('customer-ranking')">🏆 顧客貢獻排行</a>
                     <a href="#sales-by-date" id="menu-sales-by-date" onclick="loadData('sales-by-date')">📅 區間銷售流水</a>
                     <a href="#sales-by-group" id="menu-sales-by-group" onclick="loadData('sales-by-group')">💻 商品群組銷貨</a>
                     <a href="#sales" id="menu-sales" onclick="loadData('sales')">📊 銷售流水帳</a>
                     <a href="#customer-stats" id="menu-customer-stats" onclick="loadData('customer-stats')">📈 顧客消費統計</a>
-                    <a href="#products" id="menu-products" onclick="loadData('products')">🖥️ 商品母體資料</a>
+                    <a href="#products" id="menu-products" onclick="loadData('products')">💻 商品母體資料</a>
                     <a href="#customers" id="menu-customers" onclick="loadData('customers')">👥 顧客客戶清單</a>
                 </div>
             </div>
@@ -102,11 +103,19 @@ HTML_TEMPLATE = """
                 </div>
 
                 <div id="dashboard-chart-block" class="row g-4 mb-4 d-none">
-                    <div class="col-md-6 mx-auto">
-                        <div class="card p-4 bg-white text-center">
+                    <div class="col-md-6">
+                        <div class="card p-4 bg-white text-center h-100">
                             <h5 class="text-secondary mb-3">🍕 Top 5 商品毛利貢獻佔比 (圓餅圖)</h5>
                             <div class="chart-container">
                                 <canvas id="profitPieChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card p-4 bg-white text-center h-100">
+                            <h5 class="text-secondary mb-3">📊 Top 5 顧客消費總金額排行 (長條圖)</h5>
+                            <div class="chart-container">
+                                <canvas id="customerBarChart"></canvas>
                             </div>
                         </div>
                     </div>
@@ -152,6 +161,7 @@ HTML_TEMPLATE = """
     <script>
         let cachedStatsData = [];
         let profitChartInstance = null;
+        let customerChartInstance = null;
 
         document.addEventListener("DOMContentLoaded", function() {
             loadData('dashboard');
@@ -209,6 +219,7 @@ HTML_TEMPLATE = """
                         document.getElementById('kpi-total-customers').innerText = data.kpi.total_customers + ' 人';
                         
                         renderProfitPieChart(data.top_products);
+                        renderCustomerBarChart(data.top_customers);
                         renderTable(data.top_products);
                     })
                     .catch(err => {
@@ -219,6 +230,17 @@ HTML_TEMPLATE = """
 
             if (type === 'sales-by-group') { fetchSalesByGroup(); return; }
             if (type === 'sales-by-date') { fetchSalesByDate(); return; }
+
+            // 新增：前端調用顧客排行榜 API
+            if (type === 'customer-ranking') {
+                fetch('/api/customer-ranking')
+                    .then(res => res.json())
+                    .then(data => {
+                        title.innerText = '🏆 顧客貢獻度排行榜 (VVIP 總覽)';
+                        renderTable(data);
+                    });
+                return;
+            }
 
             fetch(`/api/${type}`)
                 .then(res => res.json())
@@ -243,7 +265,6 @@ HTML_TEMPLATE = """
                 });
         }
 
-        // 呼叫群組下拉選單
         function initGroupNameDropdown() {
             const select = document.getElementById('group-name-select');
             if (select.options.length > 0) return;
@@ -266,7 +287,6 @@ HTML_TEMPLATE = """
                 });
         }
 
-        // 撈取群組銷貨資料
         function fetchSalesByGroup() {
             const select = document.getElementById('group-name-select');
             const groupName = select.value || '電腦主機';
@@ -287,7 +307,6 @@ HTML_TEMPLATE = """
                 });
         }
 
-        // 撈取日期區間資料
         function fetchSalesByDate() {
             const startDate = document.getElementById('start-date').value;
             const endDate = document.getElementById('end-date').value;
@@ -323,6 +342,32 @@ HTML_TEMPLATE = """
             });
         }
 
+        // 新增：繪製 VVIP 顧客消費長條圖
+        function renderCustomerBarChart(customersData) {
+            const ctx = document.getElementById('customerBarChart').getContext('2d');
+            if (customerChartInstance) customerChartInstance.destroy();
+            const labels = customersData.map(item => item['顧客名稱']);
+            const totals = customersData.map(item => item['總金額']);
+            customerChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: '累積消費額 ($)',
+                        data: totals,
+                        backgroundColor: '#0d6efd',
+                        borderRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+        }
+
         function renderTable(data) {
             const head = document.getElementById('table-head');
             const body = document.getElementById('table-body');
@@ -343,7 +388,7 @@ HTML_TEMPLATE = """
                 keys.forEach(key => {
                     let value = row[key];
                     if (value !== null && value !== undefined && 
-                        (key.includes('單價') || key.includes('金額') || key.includes('平均') || key.includes('銷售額') || key.includes('毛利'))) {
+                        (key.includes('單價') || key.includes('金額') || key.includes('平均') || key.includes('銷售額') || key.includes('毛利') || key.includes('總金額'))) {
                         if (key.includes('率')) { value = parseFloat(value).toFixed(1) + '%'; }
                         else { const numValue = parseFloat(value); if (!isNaN(numValue)) value = '$' + Math.round(numValue).toLocaleString(); }
                     } else if (value === null || value === undefined) { value = '-'; }
@@ -385,6 +430,35 @@ def index():
     """首頁"""
     return render_template_string(HTML_TEMPLATE)
 
+@app.route('/api/customer-ranking')
+def get_customer_ranking():
+    """API: 新增功能 - 顧客累積消費金額排行 (VVIP 排行榜)"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # 完完全全對齊你提供的 SQL 邏輯，中文欄位補上雙引號
+        query = """
+            SELECT
+                c."顧客名稱",
+                COUNT(*) AS "訂單筆數",
+                SUM(p."銷售單價" * s."數量") AS "總金額"
+            FROM "銷售資料" AS s
+            INNER JOIN "商品清單" AS p
+                ON s."商品ID" = p."商品ID"
+            INNER JOIN "顧客清單" AS c
+                ON s."顧客ID" = c."顧客ID"
+            GROUP BY c."顧客ID", c."顧客名稱"
+            ORDER BY "總金額" DESC;
+        """
+        cur.execute(query)
+        results = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": f"顧客貢獻排行榜數據拉取失敗：{str(e)}"}), 500
+
 @app.route('/api/sales-by-group')
 def get_sales_by_group():
     """API: 依據商品群組查詢銷售明細"""
@@ -395,20 +469,13 @@ def get_sales_by_group():
         if group_name == 'ALL':
             query = """
                 SELECT s."傳票編號", s."處理日期" AS "處理日", p."商品名稱", p."群組名稱", c."顧客名稱", s."數量"
-                FROM "銷售資料" AS s
-                INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
-                INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID"
-                ORDER BY s."處理日期" ASC;
+                FROM "銷售資料" AS s INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID" INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID" ORDER BY s."處理日期" ASC;
             """
             cur.execute(query)
         else:
             query = """
                 SELECT s."傳票編號", s."處理日期" AS "處理日", p."商品名稱", p."群組名稱", c."顧客名稱", s."數量"
-                FROM "銷售資料" AS s
-                INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
-                INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID"
-                WHERE p."群組名稱" = %s
-                ORDER BY s."處理日期" ASC;
+                FROM "銷售資料" AS s INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID" INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID" WHERE p."群組名稱" = %s ORDER BY s."處理日期" ASC;
             """
             cur.execute(query, (group_name,))
         results = cur.fetchall()
@@ -445,7 +512,7 @@ def get_sales_by_date():
 
 @app.route('/api/dashboard-stats')
 def get_dashboard_stats():
-    """API: 取得儀表板 KPI 與商品利潤排行"""
+    """API: 取得儀表板 KPI 與商品利潤排行 + 前五大顧客排行"""
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -469,9 +536,22 @@ def get_dashboard_stats():
         """
         cur.execute(top_products_query)
         top_products = cur.fetchall()
+
+        # 這裡同步抓取前五大顧客，用來畫首頁長條圖
+        top_customers_query = """
+            SELECT c."顧客名稱", SUM(p."銷售單價" * s."數量") AS "總金額"
+            FROM "銷售資料" s
+            INNER JOIN "商品清單" p ON s."商品ID" = p."商品ID"
+            INNER JOIN "顧客清單" c ON s."顧客ID" = c."顧客ID"
+            GROUP BY c."顧客ID", c."顧客名稱"
+            ORDER BY "總金額" DESC LIMIT 5;
+        """
+        cur.execute(top_customers_query)
+        top_customers = cur.fetchall()
+
         cur.close()
         conn.close()
-        return jsonify({"kpi": kpi_result, "top_products": top_products})
+        return jsonify({"kpi": kpi_result, "top_products": top_products, "top_customers": top_customers})
     except Exception as e:
         return jsonify({"error": f"儀表板數據統計失敗，錯誤訊息：{str(e)}"}), 500
 
