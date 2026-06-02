@@ -5,11 +5,16 @@ from psycopg2.extras import RealDictCursor
 
 app = Flask(__name__)
 
+# 這一行很重要，確保 Vercel Serverless 能正確識別 WSGI 入口點
+app.secret_key = os.environ.get('SECRET_KEY', 'default_secret_key')
+
 # 從環境變數讀取 Neon PostgreSQL 連線字串
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
 def get_db_connection():
     """建立 Neon 資料庫連線"""
+    if not DATABASE_URL:
+        raise ValueError("環境變數 DATABASE_URL 未設定，請檢查 Vercel 後台設定！")
     conn = psycopg2.connect(DATABASE_URL, sslmode='require')
     return conn
 
@@ -260,7 +265,7 @@ HTML_TEMPLATE = """
 
             if (type === 'customer-loyalty') {
                 fetch('/api/customer-loyalty').then(res => res.json()).then(data => {
-                    title.innerText = '🏆 客戶活躍度與忠誠度 analysis 表 (含零消費客戶)';
+                    title.innerText = '🏆 客戶活躍度與忠誠度分析表 (含零消費客戶)';
                     renderTable(data);
                 });
                 return;
@@ -445,7 +450,6 @@ HTML_TEMPLATE = """
                 if (customers && !customers.error) {
                     customers.forEach(c => {
                         const opt = document.createElement('option');
-                        // 修正：配合後端小寫 id，使用 c['顧客id']
                         opt.value = c['顧客id']; opt.innerHTML = `[ID: ${c['顧客id']}] ${c['顧客名稱']}`;
                         select.appendChild(opt);
                     });
@@ -455,7 +459,6 @@ HTML_TEMPLATE = """
 
         function filterCustomerStats() {
             const selectedId = document.getElementById('customer-select').value;
-            // 修正：配合小寫 id，篩選鍵值改為 row['顧客id']
             if (selectedId === 'ALL') { renderTable(cachedStatsData); }
             else { renderTable(cachedStatsData.filter(row => row['顧客id'].toString() === selectedId)); }
         }
@@ -466,20 +469,23 @@ HTML_TEMPLATE = """
 
 # --- 路由與 API 設定 ---
 
+@app.route('/')
+def index():
+    """根目錄路由：顯式呈現首頁 HTML 範本"""
+    return render_template_string(HTML_TEMPLATE)
+
 @app.route('/api/customer-loyalty')
 def get_customer_loyalty():
-    """API: 客戶活躍度與忠誠度分析表 (使用 LEFT JOIN)"""
+    """API: 客戶活躍度與忠誠度分析表"""
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        # 修正：所有 ID 全數轉為小寫別名 (c."顧客ID" AS "顧客id")
         query = """
             SELECT
                 c."顧客名稱",
                 COUNT(s."傳票編號") AS "訂單筆數"
             FROM "顧客清單" AS c
-            LEFT JOIN "販賣資料" AS s
-                ON c."顧客ID" = s."顧客ID"
+            LEFT JOIN "販賣資料" AS s ON c."顧客ID" = s."顧客ID"
             GROUP BY c."顧客ID", c."顧客名稱"
             ORDER BY "訂單筆數" DESC;
         """
@@ -518,7 +524,7 @@ def get_sales_ranking():
 
 @app.route('/api/customer-ranking')
 def get_customer_ranking():
-    """API: 顧客累積消費金額排行 (VVIP 排行榜)"""
+    """API: 顧客累積消費金額排行"""
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -589,7 +595,7 @@ def get_sales_by_date():
 
 @app.route('/api/dashboard-stats')
 def get_dashboard_stats():
-    """API: 綜合計算儀表板核心指標與首頁三大圖表數據"""
+    """API: 綜合計算儀表板核心指標"""
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -641,7 +647,6 @@ def get_customer_stats():
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        # 修正：將輸出的 s."顧客ID" 透過別名轉為小寫 "顧客id" 以利前端 filter 對接
         query = """
             SELECT s."顧客ID" AS "顧客id", c."顧客名稱", MAX(p."商品名稱") AS "購買特定商品(文字最大值)", ROUND(AVG(p."販賣單價"), 0) AS "平均購買單價", SUM(s."數量") AS "累積購買總數量"
             FROM "販賣資料" s LEFT JOIN "顧客清單" c ON s."顧客ID" = c."顧客ID" LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID" GROUP BY s."顧客ID", c."顧客名稱" ORDER BY s."顧客ID" ASC;
@@ -652,11 +657,11 @@ def get_customer_stats():
         conn.close()
         return jsonify(results)
     except Exception as e:
-        return jsonify({"error": f"統計資料 analysis 失敗，錯誤訊息：{str(e)}"}), 500
+        return jsonify({"error": f"統計資料分析失敗，錯誤訊息：{str(e)}"}), 500
 
 @app.route('/api/sales')
 def get_sales():
-    """API: 取得銷售流水帳 (四表 Join 完整總覽)"""
+    """API: 取得銷售流水帳"""
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -691,7 +696,6 @@ def get_products():
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        # 修正：將 "商品ID" 轉換別名為小寫 "商品id"
         cur.execute('SELECT "商品ID" AS "商品id", "商品名稱", "群組名稱", "進貨單價", "販賣單價" FROM "商品清單" ORDER BY "商品ID";')
         results = cur.fetchall()
         cur.close()
@@ -706,7 +710,6 @@ def get_customers():
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        # 修正：將 "顧客ID" 轉換別名為小寫 "顧客id"
         cur.execute('SELECT "顧客ID" AS "顧客id", "顧客名稱", "聯絡電話" FROM "顧客清單" ORDER BY "顧客ID";')
         results = cur.fetchall()
         cur.close()
@@ -715,5 +718,6 @@ def get_customers():
     except Exception as e:
         return jsonify({"error": f"顧客資料讀取失敗：{str(e)}"}), 500
 
+# 移除原本的 app.run(debug=True)，保留這行供本地測試使用
 if __name__ == '__main__':
     app.run(debug=True)
