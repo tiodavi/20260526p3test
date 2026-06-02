@@ -124,6 +124,7 @@ HTML_TEMPLATE = """
         let cachedStatsData = [];
 
         document.addEventListener("DOMContentLoaded", function() {
+            // 系統預設首頁直接載入儀表板
             loadData('dashboard');
         });
 
@@ -228,12 +229,12 @@ HTML_TEMPLATE = """
                 keys.forEach(key => {
                     let value = row[key];
                     
-                    // 動態格式化：只要包含價格利潤等關鍵字，自動轉換為 $ 與千分位
+                    // 您的千分位與金額優化邏輯，並延伸支援「毛利」關鍵字
                     if (value !== null && value !== undefined && 
                         (key.includes('單價') || key.includes('金額') || key.includes('平均') || key.includes('銷售額') || key.includes('毛利'))) {
                         
-                        // 如果欄位本身是毛利率，改加百分比符號
                         if (key.includes('率')) {
+                            // 毛利率保持小數點與百分比
                             value = parseFloat(value).toFixed(1) + '%';
                         } else {
                             const numValue = parseFloat(value);
@@ -292,22 +293,19 @@ def index():
 
 @app.route('/api/dashboard-stats')
 def get_dashboard_stats():
-    """API: 取得儀表板 KPI (含毛利、毛利率) 與商品利潤排行"""
+    """API: 取得儀表板 KPI (修正整數除法漏洞) 與商品利潤排行"""
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        # 1. 查詢 KPI 核心指標 (新增毛利與毛利率計算)
-        # 總銷售額 = p.銷售單價 * s.數量
-        # 總毛利 = (p.銷售單價 - p.進貨單價) * s.數量
-        # 毛利率 = (總毛利 / 總銷售額) * 100
+        # 1. 查詢 KPI 核心指標 (調整 * 100.0 到除號前面，解決 0.0% 錯誤)
         kpi_query = """
             SELECT 
                 COALESCE(SUM(p."銷售單價" * s."數量"), 0) AS total_sales,
                 COALESCE(SUM((p."銷售單價" - p."進貨單價") * s."數量"), 0) AS total_profit,
                 CASE 
                     WHEN SUM(p."銷售單價" * s."數量") > 0 
-                    THEN ROUND((SUM((p."銷售單價" - p."進貨單價") * s."數量") / SUM(p."銷售單價" * s."數量")) * 100, 1)
+                    THEN ROUND((SUM((p."銷售單價" - p."進貨單價") * s."數量") * 100.0 / SUM(p."銷售單價" * s."數量")), 1)
                     ELSE 0 
                 END AS margin_rate,
                 COALESCE(SUM(s."數量"), 0) AS total_qty,
@@ -323,14 +321,14 @@ def get_dashboard_stats():
         cur.execute(kpi_query)
         kpi_result = cur.fetchone()
 
-        # 2. 查詢 Top 5 高毛利商品排行 (從看營業額改為看「賺了多少錢」)
+        # 2. 查詢 Top 5 高毛利商品排行 (同樣修正單品毛利率整數除法)
         top_products_query = """
             SELECT 
                 p."商品名稱",
                 SUM(s."數量") AS "總銷售數量",
                 SUM(p."銷售單價" * s."數量") AS "總銷售額",
                 SUM((p."銷售單價" - p."進貨單價") * s."數量") AS "總創造毛利",
-                ROUND((SUM((p."銷售單價" - p."進貨單價") * s."數量") / NULLIF(SUM(p."銷售單價" * s."數量"), 0)) * 100, 1) AS "單品毛利率"
+                ROUND((SUM((p."銷售單價" - p."進貨單價") * s."數量") * 100.0 / NULLIF(SUM(p."銷售單價" * s."數量"), 0)), 1) AS "單品毛利率"
             FROM "銷售資料" s
             LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID"
             GROUP BY p."商品名稱"
