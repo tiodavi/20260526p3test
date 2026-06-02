@@ -161,7 +161,6 @@ HTML_TEMPLATE = """
             document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active'));
             document.getElementById(`menu-${type}`).classList.add('active');
             
-            // 控制各頁面專屬篩選欄位的顯示與隱藏
             if (type === 'customer-stats') {
                 filterBlock.style.display = 'flex';
                 initCustomerDropdown();
@@ -171,7 +170,7 @@ HTML_TEMPLATE = """
 
             if (type === 'sales-by-customer') {
                 filterBlockCustomer.style.display = 'flex';
-                initCustomerNameDropdown(); // 初始化顧客選單
+                initCustomerNameDropdown(); 
             } else {
                 filterBlockCustomer.style.display = 'none';
             }
@@ -213,7 +212,6 @@ HTML_TEMPLATE = """
                 return;
             }
 
-            // 新增自訂顧客查詢頁面的獨立處理邏輯
             if (type === 'sales-by-customer') {
                 fetchSalesByCustomer();
                 return;
@@ -245,11 +243,18 @@ HTML_TEMPLATE = """
                 });
         }
 
-        // 初始化「顧客消費明細」專用的顧客選單（預設選中發財資訊公司）
+        // 初始化「顧客消費明細」專用下拉選單 (加入"顯示所有顧客"選項，且預設維持發財資訊公司)
         function initCustomerNameDropdown() {
             const select = document.getElementById('customer-name-select');
-            if (select.options.length > 0) return; // 避免重複加載
+            if (select.options.length > 0) return; 
 
+            // 1. 先加入不設條件的「全體都有」選項
+            const allOpt = document.createElement('option');
+            allOpt.value = 'ALL';
+            allOpt.innerHTML = '-- 顯示所有顧客明細 --';
+            select.appendChild(allOpt);
+
+            // 2. 再撈取所有顧客名單加入選單
             fetch('/api/customers')
                 .then(res => res.json())
                 .then(customers => {
@@ -259,7 +264,7 @@ HTML_TEMPLATE = """
                             opt.value = c['顧客名稱'];
                             opt.innerHTML = c['顧客名稱'];
                             if (c['顧客名稱'] === '發財資訊公司') {
-                                opt.selected = true; // 預設勾選
+                                opt.selected = true; // 系統預設幫使用者勾選發財資訊公司
                             }
                             select.appendChild(opt);
                         });
@@ -267,16 +272,21 @@ HTML_TEMPLATE = """
                 });
         }
 
-        // 當下拉選單變更時，觸發此函式向後端要特定顧客的明細
+        // 當下拉選單變更時向後端要明細資料
         function fetchSalesByCustomer() {
             const select = document.getElementById('customer-name-select');
-            // 首次進入時若下拉選單還沒建好，預設帶入 '發財資訊公司'
             const customerName = select.value || '發財資訊公司'; 
             const title = document.getElementById('page-title');
             const body = document.getElementById('table-body');
             const head = document.getElementById('table-head');
 
-            title.innerText = `🏢 顧客消費明細 - ${customerName}`;
+            // 依據是否為 ALL 動態修正網頁的大標題
+            if (customerName === 'ALL') {
+                title.innerText = '🏢 顧客消費明細 - 全體顧客總覽';
+            } else {
+                title.innerText = `🏢 顧客消費明細 - ${customerName}`;
+            }
+
             body.innerHTML = '<tr><td class="text-center py-4" colspan="10"><div class="spinner-border spinner-border-sm text-primary me-2"></div>查詢中，請稍候...</td></tr>';
 
             fetch(`/api/sales-by-customer?customer_name=${encodeURIComponent(customerName)}`)
@@ -284,7 +294,7 @@ HTML_TEMPLATE = """
                 .then(data => {
                     if (!data || data.error || data.length === 0) {
                         head.innerHTML = '';
-                        body.innerHTML = `<tr><td class="text-center py-4 text-muted" colspan="10">⚠️ ${data.error || '該顧客目前無任何消費明細'}</td></tr>`;
+                        body.innerHTML = `<tr><td class="text-center py-4 text-muted" colspan="10">⚠️ ${data.error || '目前無任何消費明細'}</td></tr>`;
                         return;
                     }
                     renderTable(data);
@@ -422,38 +432,58 @@ def index():
 
 @app.route('/api/sales-by-customer')
 def get_sales_by_customer():
-    """API: 根據顧客名稱動態查詢消費明細 (100% 採用使用者提供的 SQL 結構)"""
-    # 獲取前端傳來的顧客名稱參數，若未傳入則預設為 '發財資訊公司'
+    """API: 根據顧客名稱動態查詢消費明細 (支援全體都有的無條件查詢)"""
     customer_name = request.args.get('customer_name', '發財資訊公司')
     
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        # 完全採用您提供的 SQL 語法，僅將 hardcode 的名稱改為動態變數 %s
-        query = """
-            SELECT
-                s."傳票編號",
-                s."處理日期" AS "處理日",
-                p."商品名稱",
-                p."銷售單價" AS "販賣單價",
-                s."數量",
-                (p."銷售單價" * s."數量") AS "小計"
-            FROM "銷售資料" AS s
-            INNER JOIN "商品清單" AS p
-                ON s."商品ID" = p."商品ID"
-            INNER JOIN "顧客清單" AS c
-                ON s."顧客ID" = c."顧客ID"
-            WHERE c."顧客名稱" = %s
-            ORDER BY s."傳票編號" ASC;
-        """
-        cur.execute(query, (customer_name,))
+        # 判斷是否為 ALL：若是，則將 WHERE 條件拉掉，呈現全體表格
+        if customer_name == 'ALL':
+            query = """
+                SELECT
+                    s."傳票編號",
+                    s."處理日期" AS "處理日",
+                    p."商品名稱",
+                    p."銷售單價" AS "販賣單價",
+                    s."數量",
+                    (p."銷售單價" * s."數量") AS "小計",
+                    c."顧客名稱"
+                FROM "銷售資料" AS s
+                INNER JOIN "商品清單" AS p
+                    ON s."商品ID" = p."商品ID"
+                INNER JOIN "顧客清單" AS c
+                    ON s."顧客ID" = c."顧客ID"
+                ORDER BY s."傳票編號" ASC;
+            """
+            cur.execute(query)
+        else:
+            # 原本的特定顧客查詢 (包含動態安全性防護參數綁定)
+            query = """
+                SELECT
+                    s."傳票編號",
+                    s."處理日期" AS "處理日",
+                    p."商品名稱",
+                    p."銷售單價" AS "販賣單價",
+                    s."數量",
+                    (p."銷售單價" * s."數量") AS "小計"
+                FROM "銷售資料" AS s
+                INNER JOIN "商品清單" AS p
+                    ON s."商品ID" = p."商品ID"
+                INNER JOIN "顧客清單" AS c
+                    ON s."顧客ID" = c."顧客ID"
+                WHERE c."顧客名稱" = %s
+                ORDER BY s."傳票編號" ASC;
+            """
+            cur.execute(query, (customer_name,))
+            
         results = cur.fetchall()
         cur.close()
         conn.close()
         return jsonify(results)
     except Exception as e:
-        return jsonify({"error": f"顧客明細查詢失敗，錯誤訊息：{str(e)}"}), 500
+        return jsonify({"error": f"顧客消費明細數據抓取錯誤：{str(e)}"}), 500
 
 @app.route('/api/dashboard-stats')
 def get_dashboard_stats():
