@@ -260,7 +260,7 @@ HTML_TEMPLATE = """
 
             if (type === 'customer-loyalty') {
                 fetch('/api/customer-loyalty').then(res => res.json()).then(data => {
-                    title.innerText = '🏆 客戶活躍度與忠誠度分析表 (含零消費客戶)';
+                    title.innerText = '🏆 客戶活躍度與忠誠度 analysis 表 (含零消費客戶)';
                     renderTable(data);
                 });
                 return;
@@ -445,7 +445,8 @@ HTML_TEMPLATE = """
                 if (customers && !customers.error) {
                     customers.forEach(c => {
                         const opt = document.createElement('option');
-                        opt.value = c['顧客ID']; opt.innerHTML = `[ID: ${c['顧客ID']}] ${c['顧客名稱']}`;
+                        // 修正：配合後端小寫 id，使用 c['顧客id']
+                        opt.value = c['顧客id']; opt.innerHTML = `[ID: ${c['顧客id']}] ${c['顧客名稱']}`;
                         select.appendChild(opt);
                     });
                 }
@@ -454,8 +455,9 @@ HTML_TEMPLATE = """
 
         function filterCustomerStats() {
             const selectedId = document.getElementById('customer-select').value;
+            // 修正：配合小寫 id，篩選鍵值改為 row['顧客id']
             if (selectedId === 'ALL') { renderTable(cachedStatsData); }
-            else { renderTable(cachedStatsData.filter(row => row['顧客ID'].toString() === selectedId)); }
+            else { renderTable(cachedStatsData.filter(row => row['顧客id'].toString() === selectedId)); }
         }
     </script>
 </body>
@@ -464,17 +466,13 @@ HTML_TEMPLATE = """
 
 # --- 路由與 API 設定 ---
 
-@app.route('/')
-def index():
-    """首頁"""
-    return render_template_string(HTML_TEMPLATE)
-
 @app.route('/api/customer-loyalty')
 def get_customer_loyalty():
     """API: 客戶活躍度與忠誠度分析表 (使用 LEFT JOIN)"""
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
+        # 修正：所有 ID 全數轉為小寫別名 (c."顧客ID" AS "顧客id")
         query = """
             SELECT
                 c."顧客名稱",
@@ -643,8 +641,9 @@ def get_customer_stats():
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
+        # 修正：將輸出的 s."顧客ID" 透過別名轉為小寫 "顧客id" 以利前端 filter 對接
         query = """
-            SELECT s."顧客ID", c."顧客名稱", MAX(p."商品名稱") AS "購買特定商品(文字最大值)", ROUND(AVG(p."販賣單價"), 0) AS "平均購買單價", SUM(s."數量") AS "累積購買總數量"
+            SELECT s."顧客ID" AS "顧客id", c."顧客名稱", MAX(p."商品名稱") AS "購買特定商品(文字最大值)", ROUND(AVG(p."販賣單價"), 0) AS "平均購買單價", SUM(s."數量") AS "累積購買總數量"
             FROM "販賣資料" s LEFT JOIN "顧客清單" c ON s."顧客ID" = c."顧客ID" LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID" GROUP BY s."顧客ID", c."顧客名稱" ORDER BY s."顧客ID" ASC;
         """
         cur.execute(query)
@@ -653,7 +652,7 @@ def get_customer_stats():
         conn.close()
         return jsonify(results)
     except Exception as e:
-        return jsonify({"error": f"統計資料分析失敗，錯誤訊息：{str(e)}"}), 500
+        return jsonify({"error": f"統計資料 analysis 失敗，錯誤訊息：{str(e)}"}), 500
 
 @app.route('/api/sales')
 def get_sales():
@@ -692,7 +691,8 @@ def get_products():
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute('SELECT "商品ID", "商品名稱", "群組名稱", "進貨單價", "販賣單價" FROM "商品清單" ORDER BY "商品ID";')
+        # 修正：將 "商品ID" 轉換別名為小寫 "商品id"
+        cur.execute('SELECT "商品ID" AS "商品id", "商品名稱", "群組名稱", "進貨單價", "販賣單價" FROM "商品清單" ORDER BY "商品ID";')
         results = cur.fetchall()
         cur.close()
         conn.close()
@@ -706,7 +706,8 @@ def get_customers():
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute('SELECT "顧客ID", "顧客名稱", "聯絡電話" FROM "顧客清單" ORDER BY "顧客ID";')
+        # 修正：將 "顧客ID" 轉換別名為小寫 "顧客id"
+        cur.execute('SELECT "顧客ID" AS "顧客id", "顧客名稱", "聯絡電話" FROM "顧客清單" ORDER BY "顧客ID";')
         results = cur.fetchall()
         cur.close()
         conn.close()
