@@ -33,7 +33,7 @@ HTML_TEMPLATE = """
         .filter-container { display: none; background: #e9ecef; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
         .kpi-card { border-left: 5px solid #0d6efd; }
         .kpi-title { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; color: #6c757d; }
-        .kpi-value { font-size: 1.8rem; font-weight: 700; color: #343a40; }
+        .kpi-value { font-size: 1.6rem; font-weight: 700; color: #343a40; }
     </style>
 </head>
 <body>
@@ -59,27 +59,39 @@ HTML_TEMPLATE = """
                 </div>
 
                 <div id="dashboard-cards" class="row g-3 mb-4">
-                    <div class="col-md-3">
+                    <div class="col-md-2">
                         <div class="card p-3 bg-white h-100 kpi-card" style="border-left-color: #0d6efd;">
-                            <div class="kpi-title">💰 累積總銷售額</div>
+                            <div class="kpi-title">💰 累積銷售額</div>
                             <div class="kpi-value" id="kpi-total-sales">$0</div>
                         </div>
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-2">
+                        <div class="card p-3 bg-white h-100 kpi-card" style="border-left-color: #6f42c1;">
+                            <div class="kpi-title">💵 預估總毛利</div>
+                            <div class="kpi-value" id="kpi-total-profit">$0</div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="card p-3 bg-white h-100 kpi-card" style="border-left-color: #fd7e14;">
+                            <div class="kpi-title">📊 平均毛利率</div>
+                            <div class="kpi-value" id="kpi-margin-rate">0%</div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
                         <div class="card p-3 bg-white h-100 kpi-card" style="border-left-color: #198754;">
-                            <div class="kpi-title">📦 總銷售商品數</div>
+                            <div class="kpi-title">📦 總銷售商品</div>
                             <div class="kpi-value" id="kpi-total-qty">0 件</div>
                         </div>
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-2">
                         <div class="card p-3 bg-white h-100 kpi-card" style="border-left-color: #ffc107;">
-                            <div class="kpi-title">🤝 平均客單價 (按訂單)</div>
+                            <div class="kpi-title">🤝 平均客單價</div>
                             <div class="kpi-value" id="kpi-avg-order">$0</div>
                         </div>
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-2">
                         <div class="card p-3 bg-white h-100 kpi-card" style="border-left-color: #dc3545;">
-                            <div class="kpi-title">🔥 活躍客戶數</div>
+                            <div class="kpi-title">👥 活躍客戶數</div>
                             <div class="kpi-value" id="kpi-total-customers">0 人</div>
                         </div>
                     </div>
@@ -93,7 +105,7 @@ HTML_TEMPLATE = """
                 </div>
 
                 <div class="card p-4 bg-white">
-                    <h5 id="table-title" class="mb-3 text-secondary" style="display:none;">🔥 Top 5 熱銷商品排行</h5>
+                    <h5 id="table-title" class="mb-3 text-secondary" style="display:none;">🔥 Top 5 高毛利商品排行</h5>
                     <div class="table-responsive">
                         <table class="table table-striped table-hover align-middle m-0" id="data-table">
                             <thead id="table-head">
@@ -112,7 +124,6 @@ HTML_TEMPLATE = """
         let cachedStatsData = [];
 
         document.addEventListener("DOMContentLoaded", function() {
-            // 預設載入儀表板
             loadData('dashboard');
         });
 
@@ -127,7 +138,6 @@ HTML_TEMPLATE = """
             document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active'));
             document.getElementById(`menu-${type}`).classList.add('active');
             
-            // UI 控制隱藏與顯示
             if (type === 'customer-stats') {
                 filterBlock.style.display = 'flex';
                 initCustomerDropdown();
@@ -146,7 +156,6 @@ HTML_TEMPLATE = """
             
             body.innerHTML = '<tr><td class="text-center py-4" colspan="10"><div class="spinner-border spinner-border-sm text-primary me-2"></div>讀取資料中，請稍候...</td></tr>';
 
-            // 處理儀表板的特別請求
             if (type === 'dashboard') {
                 fetch('/api/dashboard-stats')
                     .then(res => res.json())
@@ -155,13 +164,15 @@ HTML_TEMPLATE = """
                             body.innerHTML = `<tr><td class="text-center py-4 text-danger" colspan="10">❌ 數據載入失敗: ${data.error}</td></tr>`;
                             return;
                         }
-                        // 渲染 KPI 卡片
+                        // 渲染六大 KPI 卡片
                         document.getElementById('kpi-total-sales').innerText = '$' + Math.round(data.kpi.total_sales).toLocaleString();
+                        document.getElementById('kpi-total-profit').innerText = '$' + Math.round(data.kpi.total_profit).toLocaleString();
+                        document.getElementById('kpi-margin-rate').innerText = data.kpi.margin_rate + '%';
                         document.getElementById('kpi-total-qty').innerText = Math.round(data.kpi.total_qty).toLocaleString() + ' 件';
                         document.getElementById('kpi-avg-order').innerText = '$' + Math.round(data.kpi.avg_order_value).toLocaleString();
                         document.getElementById('kpi-total-customers').innerText = data.kpi.total_customers + ' 人';
                         
-                        // 下方表格渲染熱銷商品
+                        // 下方表格渲染高毛利排行
                         renderTable(data.top_products);
                     })
                     .catch(err => {
@@ -170,7 +181,6 @@ HTML_TEMPLATE = """
                 return;
             }
 
-            // 一般 API 請求
             fetch(`/api/${type}`)
                 .then(res => res.json())
                 .then(data => {
@@ -218,11 +228,18 @@ HTML_TEMPLATE = """
                 keys.forEach(key => {
                     let value = row[key];
                     
+                    // 動態格式化：只要包含價格利潤等關鍵字，自動轉換為 $ 與千分位
                     if (value !== null && value !== undefined && 
-                        (key.includes('單價') || key.includes('金額') || key.includes('平均') || key.includes('銷售額'))) {
-                        const numValue = parseFloat(value);
-                        if (!isNaN(numValue)) {
-                            value = '$' + Math.round(numValue).toLocaleString();
+                        (key.includes('單價') || key.includes('金額') || key.includes('平均') || key.includes('銷售額') || key.includes('毛利'))) {
+                        
+                        // 如果欄位本身是毛利率，改加百分比符號
+                        if (key.includes('率')) {
+                            value = parseFloat(value).toFixed(1) + '%';
+                        } else {
+                            const numValue = parseFloat(value);
+                            if (!isNaN(numValue)) {
+                                value = '$' + Math.round(numValue).toLocaleString();
+                            }
                         }
                     } else if (value === null || value === undefined) {
                         value = '-';
@@ -275,19 +292,24 @@ def index():
 
 @app.route('/api/dashboard-stats')
 def get_dashboard_stats():
-    """API: 取得儀表板 KPI 與熱銷排行數據"""
+    """API: 取得儀表板 KPI (含毛利、毛利率) 與商品利潤排行"""
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        # 1. 查詢 KPI 核心指標
-        # - 總銷售額：SUM(銷售單價 * 數量)
-        # - 總商品數量：SUM(數量)
-        # - 平均客單價：總銷售額 / 獨立傳票(訂單)數量
-        # - 活躍客戶數：不重複的顧客ID數量
+        # 1. 查詢 KPI 核心指標 (新增毛利與毛利率計算)
+        # 總銷售額 = p.銷售單價 * s.數量
+        # 總毛利 = (p.銷售單價 - p.進貨單價) * s.數量
+        # 毛利率 = (總毛利 / 總銷售額) * 100
         kpi_query = """
             SELECT 
                 COALESCE(SUM(p."銷售單價" * s."數量"), 0) AS total_sales,
+                COALESCE(SUM((p."銷售單價" - p."進貨單價") * s."數量"), 0) AS total_profit,
+                CASE 
+                    WHEN SUM(p."銷售單價" * s."數量") > 0 
+                    THEN ROUND((SUM((p."銷售單價" - p."進貨單價") * s."數量") / SUM(p."銷售單價" * s."數量")) * 100, 1)
+                    ELSE 0 
+                END AS margin_rate,
                 COALESCE(SUM(s."數量"), 0) AS total_qty,
                 COUNT(DISTINCT s."顧客ID") AS total_customers,
                 CASE 
@@ -301,16 +323,18 @@ def get_dashboard_stats():
         cur.execute(kpi_query)
         kpi_result = cur.fetchone()
 
-        # 2. 查詢 Top 5 熱銷商品排行
+        # 2. 查詢 Top 5 高毛利商品排行 (從看營業額改為看「賺了多少錢」)
         top_products_query = """
             SELECT 
                 p."商品名稱",
                 SUM(s."數量") AS "總銷售數量",
-                SUM(p."銷售單價" * s."數量") AS "總銷售額"
+                SUM(p."銷售單價" * s."數量") AS "總銷售額",
+                SUM((p."銷售單價" - p."進貨單價") * s."數量") AS "總創造毛利",
+                ROUND((SUM((p."銷售單價" - p."進貨單價") * s."數量") / NULLIF(SUM(p."銷售單價" * s."數量"), 0)) * 100, 1) AS "單品毛利率"
             FROM "銷售資料" s
             LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID"
             GROUP BY p."商品名稱"
-            ORDER BY "總銷售額" DESC
+            ORDER BY "總創造毛利" DESC
             LIMIT 5;
         """
         cur.execute(top_products_query)
