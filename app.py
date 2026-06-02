@@ -22,6 +22,7 @@ HTML_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>3C 進銷存管理系統</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { background-color: #f8f9fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         .sidebar { background: #212529; color: white; min-height: 100vh; }
@@ -34,6 +35,7 @@ HTML_TEMPLATE = """
         .kpi-card { border-left: 5px solid #0d6efd; }
         .kpi-title { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; color: #6c757d; }
         .kpi-value { font-size: 1.6rem; font-weight: 700; color: #343a40; }
+        .chart-container { position: relative; height: 300px; width: 100%; display: flex; justify-content: center; align-items: center; }
     </style>
 </head>
 <body>
@@ -97,6 +99,17 @@ HTML_TEMPLATE = """
                     </div>
                 </div>
 
+                <div id="dashboard-chart-block" class="row g-4 mb-4" style="display:none;">
+                    <div class="col-md-10 mx-auto">
+                        <div class="card p-4 bg-white text-center">
+                            <h5 class="text-secondary mb-3">🍕 Top 5 商品毛利貢獻佔比 (圓餅圖)</h5>
+                            <div class="chart-container">
+                                <canvas id="profitPieChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div id="filter-block" class="filter-container align-items-center gap-3">
                     <label for="customer-select" class="form-label m-0 fw-bold text-secondary">🔍 篩選特定顧客：</label>
                     <select id="customer-select" class="form-select" style="max-width: 300px;" onchange="filterCustomerStats()">
@@ -105,7 +118,7 @@ HTML_TEMPLATE = """
                 </div>
 
                 <div class="card p-4 bg-white">
-                    <h5 id="table-title" class="mb-3 text-secondary" style="display:none;">🔥 Top 5 高毛利商品排行</h5>
+                    <h5 id="table-title" class="mb-3 text-secondary" style="display:none;">🔥 Top 5 高毛利商品明細排行</h5>
                     <div class="table-responsive">
                         <table class="table table-striped table-hover align-middle m-0" id="data-table">
                             <thead id="table-head">
@@ -122,9 +135,9 @@ HTML_TEMPLATE = """
 
     <script>
         let cachedStatsData = [];
+        let profitChartInstance = null; // 用來儲存 Chart.js 實例，避免重複渲染衝突
 
         document.addEventListener("DOMContentLoaded", function() {
-            // 系統預設首頁直接載入儀表板
             loadData('dashboard');
         });
 
@@ -135,6 +148,7 @@ HTML_TEMPLATE = """
             const tableTitle = document.getElementById('table-title');
             const filterBlock = document.getElementById('filter-block');
             const dashboardCards = document.getElementById('dashboard-cards');
+            const chartBlock = document.getElementById('dashboard-chart-block');
             
             document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active'));
             document.getElementById(`menu-${type}`).classList.add('active');
@@ -148,10 +162,12 @@ HTML_TEMPLATE = """
 
             if (type === 'dashboard') {
                 dashboardCards.style.display = 'flex';
+                chartBlock.style.display = 'row'; // 顯示圖表區
                 tableTitle.style.display = 'block';
                 title.innerText = '🏠 營運儀表板';
             } else {
                 dashboardCards.style.display = 'none';
+                chartBlock.style.display = 'none'; // 隱藏圖表區
                 tableTitle.style.display = 'none';
             }
             
@@ -173,6 +189,9 @@ HTML_TEMPLATE = """
                         document.getElementById('kpi-avg-order').innerText = '$' + Math.round(data.kpi.avg_order_value).toLocaleString();
                         document.getElementById('kpi-total-customers').innerText = data.kpi.total_customers + ' 人';
                         
+                        // 渲染 Chart.js 圓餅圖
+                        renderProfitPieChart(data.top_products);
+
                         // 下方表格渲染高毛利排行
                         renderTable(data.top_products);
                     })
@@ -208,6 +227,54 @@ HTML_TEMPLATE = """
                 });
         }
 
+        // 🎨 新增：渲染 Chart.js 圓餅圖的函式
+        function renderProfitPieChart(productsData) {
+            const ctx = document.getElementById('profitPieChart').getContext('2d');
+            
+            // 如果之前已經有建立過圖表，先將它銷毀以避免重疊錯誤
+            if (profitChartInstance) {
+                profitChartInstance.destroy();
+            }
+
+            // 準備圖表所需的標籤(商品名稱)與數據(總創造毛利)
+            const labels = productsData.map(item => item['商品名稱']);
+            const profits = productsData.map(item => item['總創造毛利']);
+
+            profitChartInstance = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: '總創造毛利',
+                        data: profits,
+                        backgroundColor: [
+                            '#0d6efd', '#6f42c1', '#fd7e14', '#198754', '#ffc107'
+                        ],
+                        hoverOffset: 15
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right', // 標籤放在右邊比較好閱讀
+                            labels: { font: { size: 14 } }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                // 讓滑鼠移過去時，提示文字也能呈現漂亮的千分位錢字號
+                                label: function(context) {
+                                    let value = context.raw || 0;
+                                    return ' ' + context.label + ': $' + Math.round(value).toLocaleString();
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
         function renderTable(data) {
             const head = document.getElementById('table-head');
             const body = document.getElementById('table-body');
@@ -229,12 +296,10 @@ HTML_TEMPLATE = """
                 keys.forEach(key => {
                     let value = row[key];
                     
-                    // 您的千分位與金額優化邏輯，並延伸支援「毛利」關鍵字
                     if (value !== null && value !== undefined && 
                         (key.includes('單價') || key.includes('金額') || key.includes('平均') || key.includes('銷售額') || key.includes('毛利'))) {
                         
                         if (key.includes('率')) {
-                            // 毛利率保持小數點與百分比
                             value = parseFloat(value).toFixed(1) + '%';
                         } else {
                             const numValue = parseFloat(value);
@@ -293,12 +358,12 @@ def index():
 
 @app.route('/api/dashboard-stats')
 def get_dashboard_stats():
-    """API: 取得儀表板 KPI (修正整數除法漏洞) 與商品利潤排行"""
+    """API: 取得儀表板 KPI (含浮點數毛利優化) 與商品利潤排行"""
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        # 1. 查詢 KPI 核心指標 (調整 * 100.0 到除號前面，解決 0.0% 錯誤)
+        # 1. 查詢 KPI 核心指標 (已修正 PostgreSQL 整數除法漏洞)
         kpi_query = """
             SELECT 
                 COALESCE(SUM(p."銷售單價" * s."數量"), 0) AS total_sales,
@@ -321,7 +386,7 @@ def get_dashboard_stats():
         cur.execute(kpi_query)
         kpi_result = cur.fetchone()
 
-        # 2. 查詢 Top 5 高毛利商品排行 (同樣修正單品毛利率整數除法)
+        # 2. 查詢 Top 5 高毛利商品排行 (數據直接共用給圓餅圖與下方表格)
         top_products_query = """
             SELECT 
                 p."商品名稱",
