@@ -674,9 +674,48 @@ HTML_TEMPLATE = """
 </html>
 """
 
-# --- 🚀 新增：熱門組合商品交叉銷售分析 API ---
+# --- 🚀 修正版：熱門組合商品交叉銷售分析 API ---
 @app.route('/api/cross-selling-analysis')
 def get_cross_selling_analysis():
+    """API: 輸入基準商品ID，找出買過該商品的客群，還買了哪些「其他商品」的排名累計"""
+    target_product_id = request.args.get('target_product_id')
+    if not target_product_id:
+        return jsonify({"error": "缺少基準商品 ID"}), 400
+        
+    try:
+        # 強制將傳入的 ID 轉為整數，避免型態比對失敗
+        target_id_int = int(target_product_id)
+    except ValueError:
+        return jsonify({"error": "商品 ID 格式必須為數字"}), 400
+        
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                # 精簡優化後的 SQL 語法：直接關聯，不容易受命名空間干擾
+                query = """
+                    SELECT 
+                        p."商品名稱",
+                        p."群組名稱",
+                        COUNT(DISTINCT s."顧客ID") AS "購買客戶數",
+                        SUM(s."數量") AS "累積購買總數量",
+                        SUM(s."數量" * p."販賣單價") AS "交叉貢獻總金額"
+                    FROM "販賣資料" AS s
+                    INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
+                    WHERE s."顧客ID" IN (
+                        -- 子查詢：抓出買過基準商品的所有顧客 ID
+                        SELECT DISTINCT "顧客ID"
+                        FROM "販賣資料"
+                        WHERE "商品ID" = %s
+                    )
+                    AND s."商品ID" <> %s  -- 排除基準商品自己
+                    GROUP BY p."商品ID", p."商品名稱", p."群組名稱"
+                    ORDER BY "累積購買總數量" DESC, "交叉貢獻總金額" DESC;
+                """
+                cur.execute(query, (target_id_int, target_id_int))
+                results = cur.fetchall()
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": f"交叉銷售分析失敗：{str(e)}"}), 500
     """API: 輸入基準商品ID，找出買過該商品的客群，還買了哪些「其他商品」的排名累計"""
     target_product_id = request.args.get('target_product_id')
     if not target_product_id:
