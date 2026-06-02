@@ -5,6 +5,9 @@ from psycopg2.extras import RealDictCursor
 
 app = Flask(__name__)
 
+# 這一行很重要，確保 Vercel Serverless 能正確識別 WSGI 入口點
+app.secret_key = os.environ.get('SECRET_KEY', 'default_secret_key')
+
 # 從環境變數讀取 Neon PostgreSQL 連線字串
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
@@ -64,7 +67,7 @@ HTML_TEMPLATE = """
             <div class="col-md-10 p-4">
                 <div class="d-flex justify-content-between align-items-center mb-4">
                     <h2 id="page-title" class="m-0">🏠 營運儀表板</h2>
-                    <span class="badge bg-success p-2">Vercel 雲端運作中</span>
+                    <span class="badge bg-success p-2">Neon 雲端連線正常</span>
                 </div>
 
                 <div id="dashboard-cards" class="row g-3 mb-4">
@@ -213,7 +216,7 @@ HTML_TEMPLATE = """
                 tableTitle.style.display = 'none';
             }
             
-            body.innerHTML = '<tr><td class="text-center py-4" colspan="10"><div class="spinner-border spinner-border-sm text-primary me-2"></div>讀取資料中...</td></tr>';
+            body.innerHTML = '<tr><td class="text-center py-4" colspan="10"><div class="spinner-border spinner-border-sm text-primary me-2"></div>讀取資料中，請稍候...</td></tr>';
 
             if (type === 'dashboard') {
                 fetch('/api/dashboard-stats')
@@ -302,7 +305,7 @@ HTML_TEMPLATE = """
                 .then(res => res.json())
                 .then(products => {
                     if (products && !products.error) {
-                        const groups = [...new Set(products.map(p => p['群組名稱'] || p['群組名稱']))].filter(Boolean);
+                        const groups = [...new Set(products.map(p => p['群組名稱']))].filter(Boolean);
                         groups.forEach(g => {
                             const opt = document.createElement('option');
                             opt.value = g; opt.innerHTML = g;
@@ -457,7 +460,7 @@ HTML_TEMPLATE = """
         function filterCustomerStats() {
             const selectedId = document.getElementById('customer-select').value;
             if (selectedId === 'ALL') { renderTable(cachedStatsData); }
-            else { renderTable(cachedStatsData.filter(row => (row['顧客id'] || '').toString() === selectedId)); }
+            else { renderTable(cachedStatsData.filter(row => row['顧客id'].toString() === selectedId)); }
         }
     </script>
 </body>
@@ -468,7 +471,7 @@ HTML_TEMPLATE = """
 
 @app.route('/')
 def index():
-    """首頁"""
+    """根目錄路由：顯式呈現首頁 HTML 範本"""
     return render_template_string(HTML_TEMPLATE)
 
 @app.route('/api/customer-loyalty')
@@ -477,14 +480,13 @@ def get_customer_loyalty():
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        # 欄位全面轉為小寫：顧客名稱 -> 顧客名稱, 傳票編號 -> 傳票編號, 顧客ID -> 顧客id
         query = """
             SELECT
-                c.顧客名稱 AS "顧客名稱",
-                COUNT(s.傳票編號) AS "訂單筆數"
-            FROM 顧客清單 AS c
-            LEFT JOIN 販賣資料 AS s ON c.顧客ID = s.顧客ID
-            GROUP BY c.顧客ID, c.顧客名稱
+                c."顧客名稱",
+                COUNT(s."傳票編號") AS "訂單筆數"
+            FROM "顧客清單" AS c
+            LEFT JOIN "販賣資料" AS s ON c."顧客ID" = s."顧客ID"
+            GROUP BY c."顧客ID", c."顧客名稱"
             ORDER BY "訂單筆數" DESC;
         """
         cur.execute(query)
@@ -503,13 +505,13 @@ def get_sales_ranking():
         cur = conn.cursor(cursor_factory=RealDictCursor)
         query = """
             SELECT
-                e.負責人姓名 AS "負責人姓名",
+                e."負責人姓名",
                 COUNT(*) AS "訂單筆數",
-                SUM(p.販賣單價 * s.數量) AS "銷售總額"
-            FROM 販賣資料 AS s
-            INNER JOIN 負責人清單 AS e ON s.負責人ID = e.負責人ID
-            INNER JOIN 商品清單 AS p ON s.商品ID = p.商品ID
-            GROUP BY e.負責人ID, e.負責人姓名
+                SUM(p."販賣單價" * s."數量") AS "銷售總額"
+            FROM "販賣資料" AS s
+            INNER JOIN "負責人清單" AS e ON s."負責人ID" = e."負責人ID"
+            INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
+            GROUP BY e."負責人ID", e."負責人姓名"
             ORDER BY "銷售總額" DESC;
         """
         cur.execute(query)
@@ -527,11 +529,11 @@ def get_customer_ranking():
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         query = """
-            SELECT c.顧客名稱 AS "顧客名稱", COUNT(*) AS "訂單筆數", SUM(p.販賣單價 * s.數量) AS "總金額"
-            FROM 販賣資料 AS s
-            INNER JOIN 商品清單 AS p ON s.商品ID = p.商品ID
-            INNER JOIN 顧客清單 AS c ON s.顧客ID = c.顧客ID
-            GROUP BY c.顧客ID, c.顧客名稱 ORDER BY "總金額" DESC;
+            SELECT c."顧客名稱", COUNT(*) AS "訂單筆數", SUM(p."販賣單價" * s."數量") AS "總金額"
+            FROM "販賣資料" AS s
+            INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
+            INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID"
+            GROUP BY c."顧客ID", c."顧客名稱" ORDER BY "總金額" DESC;
         """
         cur.execute(query)
         results = cur.fetchall()
@@ -550,14 +552,14 @@ def get_sales_by_group():
         cur = conn.cursor(cursor_factory=RealDictCursor)
         if group_name == 'ALL':
             query = """
-                SELECT s.傳票編號 AS "傳票編號", s.處理日 AS "處理日", p.商品名稱 AS "商品名稱", p.群組名稱 AS "群組名稱", c.顧客名稱 AS "顧客名稱", s.數量 AS "數量"
-                FROM 販賣資料 AS s INNER JOIN 商品清單 AS p ON s.商品ID = p.商品ID INNER JOIN 顧客清單 AS c ON s.顧客ID = c.顧客ID ORDER BY s.處理日 ASC;
+                SELECT s."傳票編號", s."處理日", p."商品名稱", p."群組名稱", c."顧客名稱", s."數量"
+                FROM "販賣資料" AS s INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID" INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID" ORDER BY s."處理日" ASC;
             """
             cur.execute(query)
         else:
             query = """
-                SELECT s.傳票編號 AS "傳票編號", s.處理日 AS "處理日", p.商品名稱 AS "商品名稱", p.群組名稱 AS "群組名稱", c.顧客名稱 AS "顧客名稱", s.數量 AS "數量"
-                FROM 販賣資料 AS s INNER JOIN 商品清單 AS p ON s.商品ID = p.商品ID INNER JOIN 顧客清單 AS c ON s.顧客ID = c.顧客ID WHERE p.群組名稱 = %s ORDER BY s.處理日 ASC;
+                SELECT s."傳票編號", s."處理日", p."商品名稱", p."群組名稱", c."顧客名稱", s."數量"
+                FROM "販賣資料" AS s INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID" INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID" WHERE p."群組名稱" = %s ORDER BY s."處理日" ASC;
             """
             cur.execute(query, (group_name,))
         results = cur.fetchall()
@@ -576,12 +578,12 @@ def get_sales_by_date():
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         query = """
-            SELECT s.傳票編號 AS "傳票編號", s.處理日 AS "處理日", p.商品名稱 AS "商品名稱", e.負責人姓名 AS "負責人姓名", c.顧客名稱 AS "顧客名稱", s.數量 AS "數量"
-            FROM 販賣資料 AS s
-            INNER JOIN 商品清單 AS p ON s.商品ID = p.商品ID
-            INNER JOIN 負責人清單 AS e ON s.負責人ID = e.負責人ID
-            INNER JOIN 顧客清單 AS c ON s.顧客ID = c.顧客ID
-            WHERE s.處理日 BETWEEN %s AND %s ORDER BY s.處理日 ASC;
+            SELECT s."傳票編號", s."處理日", p."商品名稱", e."負責人姓名", c."顧客名稱", s."數量"
+            FROM "販賣資料" AS s
+            INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
+            INNER JOIN "負責人清單" AS e ON s."負責人ID" = e."負責人ID"
+            INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID"
+            WHERE s."處理日" BETWEEN %s AND %s ORDER BY s."處理日" ASC;
         """
         cur.execute(query, (start_date, end_date))
         results = cur.fetchall()
@@ -599,36 +601,36 @@ def get_dashboard_stats():
         cur = conn.cursor(cursor_factory=RealDictCursor)
         kpi_query = """
             SELECT 
-                COALESCE(SUM(p.販賣單價 * s.數量), 0) AS total_sales,
-                COALESCE(SUM((p.販賣單價 - p.進貨單價) * s.數量), 0) AS total_profit,
-                CASE WHEN SUM(p.販賣單價 * s.數量) > 0 THEN ROUND((SUM((p.販賣單價 - p.進貨單價) * s.數量) * 100.0 / SUM(p.販賣單價 * s.數量)), 1) ELSE 0 END AS margin_rate,
-                COALESCE(SUM(s.數量), 0) AS total_qty, COUNT(DISTINCT s.顧客ID) AS total_customers,
-                CASE WHEN COUNT(DISTINCT s.傳票編號) > 0 THEN COALESCE(SUM(p.販賣單價 * s.數量), 0) / COUNT(DISTINCT s.傳票編號") ELSE 0 END AS avg_order_value
-            FROM 販賣資料 s LEFT JOIN 商品清單 p ON s.商品ID = p.商品ID;
+                COALESCE(SUM(p."販賣單價" * s."數量"), 0) AS total_sales,
+                COALESCE(SUM((p."販賣單價" - p."進貨單價") * s."數量"), 0) AS total_profit,
+                CASE WHEN SUM(p."販賣單價" * s."數量") > 0 THEN ROUND((SUM((p."販賣單價" - p."進貨單價") * s."數量") * 100.0 / SUM(p."販賣單價" * s."數量")), 1) ELSE 0 END AS margin_rate,
+                COALESCE(SUM(s."數量"), 0) AS total_qty, COUNT(DISTINCT s."顧客ID") AS total_customers,
+                CASE WHEN COUNT(DISTINCT s."傳票編號") > 0 THEN COALESCE(SUM(p."販賣單價" * s."數量"), 0) / COUNT(DISTINCT s."傳票編號") ELSE 0 END AS avg_order_value
+            FROM "販賣資料" s LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID";
         """
         cur.execute(kpi_query)
         kpi_result = cur.fetchone()
 
         top_products_query = """
-            SELECT p.商品名稱 AS "商品名稱", SUM(s.數量) AS "總銷售數量", SUM(p.販賣單價 * s.數量) AS "總銷售額", SUM((p.販賣單價 - p.進貨單價) * s.數量) AS "總創造毛利",
-                   ROUND((SUM((p.販賣單價 - p.進貨單價) * s.數量) * 100.0 / NULLIF(SUM(p.販賣單價 * s.數量), 0)), 1) AS "單品毛利率"
-            FROM 販賣資料 s LEFT JOIN 商品清單 p ON s.商品ID = p.商品ID GROUP BY p.商品名稱 ORDER BY "總創造毛利" DESC LIMIT 5;
+            SELECT p."商品名稱", SUM(s."數量") AS "總銷售數量", SUM(p."販賣單價" * s."數量") AS "總銷售額", SUM((p."販賣單價" - p."進貨單價") * s."數量") AS "總創造毛利",
+                   ROUND((SUM((p."販賣單價" - p."進貨單價") * s."數量") * 100.0 / NULLIF(SUM(p."販賣單價" * s."數量"), 0)), 1) AS "單品毛利率"
+            FROM "販賣資料" s LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID" GROUP BY p."商品名稱" ORDER BY "總創造毛利" DESC LIMIT 5;
         """
         cur.execute(top_products_query)
         top_products = cur.fetchall()
 
         top_customers_query = """
-            SELECT c.顧客名稱 AS "顧客名稱", SUM(p.販賣單價 * s.數量) AS "總金額"
-            FROM 販賣資料 s INNER JOIN 商品清單 p ON s.商品ID = p.商品ID INNER JOIN 顧客清單 c ON s.顧客ID = c.顧客ID
-            GROUP BY c.顧客ID, c.顧客名稱 ORDER BY "總金額" DESC LIMIT 5;
+            SELECT c."顧客名稱", SUM(p."販賣單價" * s."數量") AS "總金額"
+            FROM "販賣資料" s INNER JOIN "商品清單" p ON s."商品ID" = p."商品ID" INNER JOIN "顧客清單" c ON s."顧客ID" = c."顧客ID"
+            GROUP BY c."顧客ID", c."顧客名稱" ORDER BY "總金額" DESC LIMIT 5;
         """
         cur.execute(top_customers_query)
         top_customers = cur.fetchall()
 
         top_sales_query = """
-            SELECT e.負責人姓名 AS "負責人姓名", SUM(p.販賣單價 * s.數量) AS "銷售總額"
-            FROM 販賣資料 s INNER JOIN 負責人清單 e ON s.負責人ID = e.負責人ID INNER JOIN 商品清單 p ON s.商品ID = p.商品ID
-            GROUP BY e.負責人ID, e.負責人姓名 ORDER BY "銷售總額" DESC LIMIT 5;
+            SELECT e."負責人姓名", SUM(p."販賣單價" * s."數量") AS "銷售總額"
+            FROM "販賣資料" s INNER JOIN "負責人清單" e ON s."負責人ID" = e."負責人ID" INNER JOIN "商品清單" p ON s."商品ID" = p."商品ID"
+            GROUP BY e."負責人ID", e."負責人姓名" ORDER BY "銷售總額" DESC LIMIT 5;
         """
         cur.execute(top_sales_query)
         top_sales = cur.fetchall()
@@ -646,8 +648,8 @@ def get_customer_stats():
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         query = """
-            SELECT s.顧客ID AS "顧客id", c.顧客名稱 AS "顧客名稱", MAX(p.商品名稱) AS "購買特定商品(文字最大值)", ROUND(AVG(p.販賣單價), 0) AS "平均購買單價", SUM(s.數量) AS "累積購買總數量"
-            FROM 販賣資料 s LEFT JOIN 顧客清單 c ON s.顧客ID = c.顧客ID LEFT JOIN 商品清單 p ON s.商品ID = p.商品ID GROUP BY s.顧客ID, c.顧客名稱 ORDER BY s.顧客ID ASC;
+            SELECT s."顧客ID" AS "顧客id", c."顧客名稱", MAX(p."商品名稱") AS "購買特定商品(文字最大值)", ROUND(AVG(p."販賣單價"), 0) AS "平均購買單價", SUM(s."數量") AS "累積購買總數量"
+            FROM "販賣資料" s LEFT JOIN "顧客清單" c ON s."顧客ID" = c."顧客ID" LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID" GROUP BY s."顧客ID", c."顧客名稱" ORDER BY s."顧客ID" ASC;
         """
         cur.execute(query)
         results = cur.fetchall()
@@ -665,20 +667,20 @@ def get_sales():
         cur = conn.cursor(cursor_factory=RealDictCursor)
         query = """
             SELECT 
-                s.傳票編號 AS "傳票編號", 
-                s.列編號 AS "列編號", 
-                s.處理日 AS "處理日", 
-                p.商品名稱 AS "商品名稱", 
-                p.販賣單價 AS "販賣單價", 
-                s.數量 AS "數量", 
-                (p.販賣單價 * s.數量) AS "流水小計", 
-                e.負責人姓名 AS "負責人姓名", 
-                c.顧客名稱 AS "顧客名稱"
-            FROM 販賣資料 AS s
-            INNER JOIN 商品清單 AS p ON s.商品ID = p.商品ID
-            INNER JOIN 負責人清單 AS e ON s.負責人ID = e.負責人ID
-            INNER JOIN 顧客清單 AS c ON s.顧客ID = c.顧客ID
-            ORDER BY s.傳票編號 ASC, s.列編號 ASC;
+                s."傳票編號", 
+                s."列編號", 
+                s."處理日", 
+                p."商品名稱", 
+                p."販賣單價", 
+                s."數量", 
+                (p."販賣單價" * s."數量") AS "流水小計", 
+                e."負責人姓名", 
+                c."顧客名稱"
+            FROM "販賣資料" AS s
+            INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
+            INNER JOIN "負責人清單" AS e ON s."負責人ID" = e."負責人ID"
+            INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID"
+            ORDER BY s."傳票編號" ASC, s."列編號" ASC;
         """
         cur.execute(query)
         results = cur.fetchall()
@@ -694,7 +696,7 @@ def get_products():
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute('SELECT 商品ID AS "商品id", 商品名稱 AS "商品名稱", 群組名稱 AS "群組名稱", 進貨單價 AS "進貨單價", 販賣單價 AS "販賣單價" FROM 商品清單 ORDER BY 商品ID;')
+        cur.execute('SELECT "商品ID" AS "商品id", "商品名稱", "群組名稱", "進貨單價", "販賣單價" FROM "商品清單" ORDER BY "商品ID";')
         results = cur.fetchall()
         cur.close()
         conn.close()
@@ -708,7 +710,7 @@ def get_customers():
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute('SELECT 顧客ID AS "顧客id", 顧客名稱 AS "顧客名稱", 聯絡電話 AS "聯絡電話" FROM 顧客清單 ORDER BY 顧客ID;')
+        cur.execute('SELECT "顧客ID" AS "顧客id", "顧客名稱", "聯絡電話" FROM "顧客清單" ORDER BY "顧客ID";')
         results = cur.fetchall()
         cur.close()
         conn.close()
@@ -716,5 +718,6 @@ def get_customers():
     except Exception as e:
         return jsonify({"error": f"顧客資料讀取失敗：{str(e)}"}), 500
 
+# 移除原本的 app.run(debug=True)，保留這行供本地測試使用
 if __name__ == '__main__':
     app.run(debug=True)
