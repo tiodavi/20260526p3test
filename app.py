@@ -5,7 +5,7 @@ from psycopg2.extras import RealDictCursor
 
 app = Flask(__name__)
 
-# 這一行很重要，確保 Vercel Serverless 能正確識別 WSGI 入口點
+# 確保 Vercel Serverless 能正確識別 WSGI 入口點
 app.secret_key = os.environ.get('SECRET_KEY', 'default_secret_key')
 
 # 從環境變數讀取 Neon PostgreSQL 連線字串
@@ -55,6 +55,7 @@ HTML_TEMPLATE = """
                     <a href="#sales-ranking" id="menu-sales-ranking" onclick="loadData('sales-ranking')">🏅 業務業績排行</a>
                     <a href="#customer-ranking" id="menu-customer-ranking" onclick="loadData('customer-ranking')">🏆 顧客貢獻排行</a>
                     <a href="#customer-loyalty" id="menu-customer-loyalty" onclick="loadData('customer-loyalty')">💎 客戶忠誠分析</a>
+                    <a href="#dead-products" id="menu-dead-products" onclick="loadData('dead-products')">⚠️ 滯銷商品分析</a>
                     <a href="#sales-by-date" id="menu-sales-by-date" onclick="loadData('sales-by-date')">📅 區間銷售流水</a>
                     <a href="#sales-by-group" id="menu-sales-by-group" onclick="loadData('sales-by-group')">💻 商品群組銷貨</a>
                     <a href="#sales" id="menu-sales" onclick="loadData('sales')">📊 銷售流水帳</a>
@@ -271,6 +272,14 @@ HTML_TEMPLATE = """
                 return;
             }
 
+            if (type === 'dead-products') {
+                fetch('/api/dead-products').then(res => res.json()).then(data => {
+                    title.innerText = '⚠️ 滯銷商品分析清單 (從未有過銷售紀錄)';
+                    renderTable(data);
+                });
+                return;
+            }
+
             fetch(`/api/${type}`)
                 .then(res => res.json())
                 .then(data => {
@@ -474,25 +483,45 @@ def index():
     """根目錄路由：顯式呈現首頁 HTML 範本"""
     return render_template_string(HTML_TEMPLATE)
 
+@app.route('/api/dead-products')
+def get_dead_products():
+    """API: 取得從未有過銷售紀錄的滯銷商品清單"""
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                query = """
+                    SELECT
+                        p."商品ID" AS "商品id",
+                        p."商品名稱",
+                        p."群組名稱"
+                    FROM "商品清單" AS p
+                    LEFT JOIN "販賣資料" AS s ON p."商品ID" = s."商品ID"
+                    WHERE s."傳票編號" IS NULL
+                    ORDER BY p."商品ID";
+                """
+                cur.execute(query)
+                results = cur.fetchall()
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": f"滯銷商品數據抓取失敗：{str(e)}"}), 500
+
 @app.route('/api/customer-loyalty')
 def get_customer_loyalty():
     """API: 客戶活躍度與忠誠度分析表"""
     try:
-        conn = get_db_connection()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        query = """
-            SELECT
-                c."顧客名稱",
-                COUNT(s."傳票編號") AS "訂單筆數"
-            FROM "顧客清單" AS c
-            LEFT JOIN "販賣資料" AS s ON c."顧客ID" = s."顧客ID"
-            GROUP BY c."顧客ID", c."顧客名稱"
-            ORDER BY "訂單筆數" DESC;
-        """
-        cur.execute(query)
-        results = cur.fetchall()
-        cur.close()
-        conn.close()
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                query = """
+                    SELECT
+                        c."顧客名稱",
+                        COUNT(s."傳票編號") AS "訂單筆數"
+                    FROM "顧客清單" AS c
+                    LEFT JOIN "販賣資料" AS s ON c."顧客ID" = s."顧客ID"
+                    GROUP BY c."顧客ID", c."顧客名稱"
+                    ORDER BY "訂單筆數" DESC;
+                """
+                cur.execute(query)
+                results = cur.fetchall()
         return jsonify(results)
     except Exception as e:
         return jsonify({"error": f"客戶活躍與忠誠度數據抓取失敗：{str(e)}"}), 500
@@ -501,23 +530,21 @@ def get_customer_loyalty():
 def get_sales_ranking():
     """API: 業務員銷售業績排行榜"""
     try:
-        conn = get_db_connection()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        query = """
-            SELECT
-                e."負責人姓名",
-                COUNT(*) AS "訂單筆數",
-                SUM(p."販賣單價" * s."數量") AS "銷售總額"
-            FROM "販賣資料" AS s
-            INNER JOIN "負責人清單" AS e ON s."負責人ID" = e."負責人ID"
-            INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
-            GROUP BY e."負責人ID", e."負責人姓名"
-            ORDER BY "銷售總額" DESC;
-        """
-        cur.execute(query)
-        results = cur.fetchall()
-        cur.close()
-        conn.close()
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                query = """
+                    SELECT
+                        e."負責人姓名",
+                        COUNT(*) AS "訂單筆數",
+                        SUM(p."販賣單價" * s."數量") AS "銷售總額"
+                    FROM "販賣資料" AS s
+                    INNER JOIN "負責人清單" AS e ON s."負責人ID" = e."負責人ID"
+                    INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
+                    GROUP BY e."負責人ID", e."負責人姓名"
+                    ORDER BY "銷售總額" DESC;
+                """
+                cur.execute(query)
+                results = cur.fetchall()
         return jsonify(results)
     except Exception as e:
         return jsonify({"error": f"業務員銷售業績排行榜抓取失敗：{str(e)}"}), 500
@@ -526,19 +553,17 @@ def get_sales_ranking():
 def get_customer_ranking():
     """API: 顧客累積消費金額排行"""
     try:
-        conn = get_db_connection()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        query = """
-            SELECT c."顧客名稱", COUNT(*) AS "訂單筆數", SUM(p."販賣單價" * s."數量") AS "總金額"
-            FROM "販賣資料" AS s
-            INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
-            INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID"
-            GROUP BY c."顧客ID", c."顧客名稱" ORDER BY "總金額" DESC;
-        """
-        cur.execute(query)
-        results = cur.fetchall()
-        cur.close()
-        conn.close()
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                query = """
+                    SELECT c."顧客名稱", COUNT(*) AS "訂單筆數", SUM(p."販賣單價" * s."數量") AS "總金額"
+                    FROM "販賣資料" AS s
+                    INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
+                    INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID"
+                    GROUP BY c."顧客ID", c."顧客名稱" ORDER BY "總金額" DESC;
+                """
+                cur.execute(query)
+                results = cur.fetchall()
         return jsonify(results)
     except Exception as e:
         return jsonify({"error": f"顧客貢獻排行榜數據拉取失敗：{str(e)}"}), 500
@@ -548,23 +573,21 @@ def get_sales_by_group():
     """API: 依據商品群組查詢銷售明細"""
     group_name = request.args.get('group_name', '電腦主機')
     try:
-        conn = get_db_connection()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        if group_name == 'ALL':
-            query = """
-                SELECT s."傳票編號", s."處理日", p."商品名稱", p."群組名稱", c."顧客名稱", s."數量"
-                FROM "販賣資料" AS s INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID" INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID" ORDER BY s."處理日" ASC;
-            """
-            cur.execute(query)
-        else:
-            query = """
-                SELECT s."傳票編號", s."處理日", p."商品名稱", p."群組名稱", c."顧客名稱", s."數量"
-                FROM "販賣資料" AS s INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID" INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID" WHERE p."群組名稱" = %s ORDER BY s."處理日" ASC;
-            """
-            cur.execute(query, (group_name,))
-        results = cur.fetchall()
-        cur.close()
-        conn.close()
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                if group_name == 'ALL':
+                    query = """
+                        SELECT s."傳票編號", s."處理日", p."商品名稱", p."群組名稱", c."顧客名稱", s."數量"
+                        FROM "販賣資料" AS s INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID" INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID" ORDER BY s."處理日" ASC;
+                    """
+                    cur.execute(query)
+                else:
+                    query = """
+                        SELECT s."傳票編號", s."處理日", p."商品名稱", p."群組名稱", c."顧客名稱", s."數量"
+                        FROM "販賣資料" AS s INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID" INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID" WHERE p."群組名稱" = %s ORDER BY s."處理日" ASC;
+                    """
+                    cur.execute(query, (group_name,))
+                results = cur.fetchall()
         return jsonify(results)
     except Exception as e:
         return jsonify({"error": f"商品群組明細查詢失敗：{str(e)}"}), 500
@@ -575,20 +598,18 @@ def get_sales_by_date():
     start_date = request.args.get('start', '2021-04-01')
     end_date = request.args.get('end', '2021-06-30')
     try:
-        conn = get_db_connection()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        query = """
-            SELECT s."傳票編號", s."處理日", p."商品名稱", e."負責人姓名", c."顧客名稱", s."數量"
-            FROM "販賣資料" AS s
-            INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
-            INNER JOIN "負責人清單" AS e ON s."負責人ID" = e."負責人ID"
-            INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID"
-            WHERE s."處理日" BETWEEN %s AND %s ORDER BY s."處理日" ASC;
-        """
-        cur.execute(query, (start_date, end_date))
-        results = cur.fetchall()
-        cur.close()
-        conn.close()
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                query = """
+                    SELECT s."傳票編號", s."處理日", p."商品名稱", e."負責人姓名", c."顧客名稱", s."數量"
+                    FROM "販賣資料" AS s
+                    INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
+                    INNER JOIN "負責人清單" AS e ON s."負責人ID" = e."負責人ID"
+                    INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID"
+                    WHERE s."處理日" BETWEEN %s AND %s ORDER BY s."處理日" ASC;
+                """
+                cur.execute(query, (start_date, end_date))
+                results = cur.fetchall()
         return jsonify(results)
     except Exception as e:
         return jsonify({"error": f"日期區間銷售流水抓取失敗：{str(e)}"}), 500
@@ -597,46 +618,44 @@ def get_sales_by_date():
 def get_dashboard_stats():
     """API: 綜合計算儀表板核心指標"""
     try:
-        conn = get_db_connection()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        kpi_query = """
-            SELECT 
-                COALESCE(SUM(p."販賣單價" * s."數量"), 0) AS total_sales,
-                COALESCE(SUM((p."販賣單價" - p."進貨單價") * s."數量"), 0) AS total_profit,
-                CASE WHEN SUM(p."販賣單價" * s."數量") > 0 THEN ROUND((SUM((p."販賣單價" - p."進貨單價") * s."數量") * 100.0 / SUM(p."販賣單價" * s."數量")), 1) ELSE 0 END AS margin_rate,
-                COALESCE(SUM(s."數量"), 0) AS total_qty, COUNT(DISTINCT s."顧客ID") AS total_customers,
-                CASE WHEN COUNT(DISTINCT s."傳票編號") > 0 THEN COALESCE(SUM(p."販賣單價" * s."數量"), 0) / COUNT(DISTINCT s."傳票編號") ELSE 0 END AS avg_order_value
-            FROM "販賣資料" s LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID";
-        """
-        cur.execute(kpi_query)
-        kpi_result = cur.fetchone()
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                kpi_query = """
+                    SELECT 
+                        COALESCE(SUM(p."販賣單價" * s."數量"), 0) AS total_sales,
+                        COALESCE(SUM((p."販賣單價" - p."進貨單價") * s."數量"), 0) AS total_profit,
+                        CASE WHEN SUM(p."販賣單價" * s."數量") > 0 THEN ROUND((SUM((p."販賣單價" - p."進貨單價") * s."數量") * 100.0 / SUM(p."販賣單價" * s."數量")), 1) ELSE 0 END AS margin_rate,
+                        COALESCE(SUM(s."數量"), 0) AS total_qty, COUNT(DISTINCT s."顧客ID") AS total_customers,
+                        CASE WHEN COUNT(DISTINCT s."傳票編號") > 0 THEN COALESCE(SUM(p."販賣單價" * s."數量"), 0) / COUNT(DISTINCT s."傳票編號") ELSE 0 END AS avg_order_value
+                    FROM "販賣資料" s LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID";
+                """
+                cur.execute(kpi_query)
+                kpi_result = cur.fetchone()
 
-        top_products_query = """
-            SELECT p."商品名稱", SUM(s."數量") AS "總銷售數量", SUM(p."販賣單價" * s."數量") AS "總銷售額", SUM((p."販賣單價" - p."進貨單價") * s."數量") AS "總創造毛利",
-                   ROUND((SUM((p."販賣單價" - p."進貨單價") * s."數量") * 100.0 / NULLIF(SUM(p."販賣單價" * s."數量"), 0)), 1) AS "單品毛利率"
-            FROM "販賣資料" s LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID" GROUP BY p."商品名稱" ORDER BY "總創造毛利" DESC LIMIT 5;
-        """
-        cur.execute(top_products_query)
-        top_products = cur.fetchall()
+                top_products_query = """
+                    SELECT p."商品名稱", SUM(s."數量") AS "總銷售數量", SUM(p."販賣單價" * s."數量") AS "總銷售額", SUM((p."販賣單價" - p."進貨單價") * s."數量") AS "總創造毛利",
+                           ROUND((SUM((p."販賣單價" - p."進貨單價") * s."數量") * 100.0 / NULLIF(SUM(p."販賣單價" * s."數量"), 0)), 1) AS "單品毛利率"
+                    FROM "販賣資料" s LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID" GROUP BY p."商品名稱" ORDER BY "總創造毛利" DESC LIMIT 5;
+                """
+                cur.execute(top_products_query)
+                top_products = cur.fetchall()
 
-        top_customers_query = """
-            SELECT c."顧客名稱", SUM(p."販賣單價" * s."數量") AS "總金額"
-            FROM "販賣資料" s INNER JOIN "商品清單" p ON s."商品ID" = p."商品ID" INNER JOIN "顧客清單" c ON s."顧客ID" = c."顧客ID"
-            GROUP BY c."顧客ID", c."顧客名稱" ORDER BY "總金額" DESC LIMIT 5;
-        """
-        cur.execute(top_customers_query)
-        top_customers = cur.fetchall()
+                top_customers_query = """
+                    SELECT c."顧客名稱", SUM(p."販賣單價" * s."數量") AS "總金額"
+                    FROM "販賣資料" s INNER JOIN "商品清單" p ON s."商品ID" = p."商品ID" INNER JOIN "顧客清單" c ON s."顧客ID" = c."顧客ID"
+                    GROUP BY c."顧客ID", c."顧客名稱" ORDER BY "總金額" DESC LIMIT 5;
+                """
+                cur.execute(top_customers_query)
+                top_customers = cur.fetchall()
 
-        top_sales_query = """
-            SELECT e."負責人姓名", SUM(p."販賣單價" * s."數量") AS "銷售總額"
-            FROM "販賣資料" s INNER JOIN "負責人清單" e ON s."負責人ID" = e."負責人ID" INNER JOIN "商品清單" p ON s."商品ID" = p."商品ID"
-            GROUP BY e."負責人ID", e."負責人姓名" ORDER BY "銷售總額" DESC LIMIT 5;
-        """
-        cur.execute(top_sales_query)
-        top_sales = cur.fetchall()
+                top_sales_query = """
+                    SELECT e."負責人姓名", SUM(p."販賣單價" * s."數量") AS "銷售總額"
+                    FROM "販賣資料" s INNER JOIN "負責人清單" e ON s."負責人ID" = e."負責人ID" INNER JOIN "商品清單" p ON s."商品ID" = p."商品ID"
+                    GROUP BY e."負責人ID", e."負責人姓名" ORDER BY "銷售總額" DESC LIMIT 5;
+                """
+                cur.execute(top_sales_query)
+                top_sales = cur.fetchall()
 
-        cur.close()
-        conn.close()
         return jsonify({"kpi": kpi_result, "top_products": top_products, "top_customers": top_customers, "top_sales": top_sales})
     except Exception as e:
         return jsonify({"error": f"儀表板數據統計失敗，錯誤訊息：{str(e)}"}), 500
@@ -645,16 +664,14 @@ def get_dashboard_stats():
 def get_customer_stats():
     """API: 取得顧客消費統計分析"""
     try:
-        conn = get_db_connection()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        query = """
-            SELECT s."顧客ID" AS "顧客id", c."顧客名稱", MAX(p."商品名稱") AS "購買特定商品(文字最大值)", ROUND(AVG(p."販賣單價"), 0) AS "平均購買單價", SUM(s."數量") AS "累積購買總數量"
-            FROM "販賣資料" s LEFT JOIN "顧客清單" c ON s."顧客ID" = c."顧客ID" LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID" GROUP BY s."顧客ID", c."顧客名稱" ORDER BY s."顧客ID" ASC;
-        """
-        cur.execute(query)
-        results = cur.fetchall()
-        cur.close()
-        conn.close()
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                query = """
+                    SELECT s."顧客ID" AS "顧客id", c."顧客名稱", MAX(p."商品名稱") AS "購買特定商品(文字最大值)", ROUND(AVG(p."販賣單價"), 0) AS "平均購買單價", SUM(s."數量") AS "累積購買總數量"
+                    FROM "販賣資料" s LEFT JOIN "顧客清單" c ON s."顧客ID" = c."顧客ID" LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID" GROUP BY s."顧客ID", c."顧客名稱" ORDER BY s."顧客ID" ASC;
+                """
+                cur.execute(query)
+                results = cur.fetchall()
         return jsonify(results)
     except Exception as e:
         return jsonify({"error": f"統計資料分析失敗，錯誤訊息：{str(e)}"}), 500
@@ -663,29 +680,27 @@ def get_customer_stats():
 def get_sales():
     """API: 取得銷售流水帳"""
     try:
-        conn = get_db_connection()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        query = """
-            SELECT 
-                s."傳票編號", 
-                s."列編號", 
-                s."處理日", 
-                p."商品名稱", 
-                p."販賣單價", 
-                s."數量", 
-                (p."販賣單價" * s."數量") AS "流水小計", 
-                e."負責人姓名", 
-                c."顧客名稱"
-            FROM "販賣資料" AS s
-            INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
-            INNER JOIN "負責人清單" AS e ON s."負責人ID" = e."負責人ID"
-            INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID"
-            ORDER BY s."傳票編號" ASC, s."列編號" ASC;
-        """
-        cur.execute(query)
-        results = cur.fetchall()
-        cur.close()
-        conn.close()
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                query = """
+                    SELECT 
+                        s."傳票編號", 
+                        s."列編號", 
+                        s."處理日", 
+                        p."商品名稱", 
+                        p."販賣單價", 
+                        s."數量", 
+                        (p."販賣單價" * s."數量") AS "流水小計", 
+                        e."負責人姓名", 
+                        c."顧客名稱"
+                    FROM "販賣資料" AS s
+                    INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
+                    INNER JOIN "負責人清單" AS e ON s."負責人ID" = e."負責人ID"
+                    INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID"
+                    ORDER BY s."傳票編號" ASC, s."列編號" ASC;
+                """
+                cur.execute(query)
+                results = cur.fetchall()
         return jsonify(results)
     except Exception as e:
         return jsonify({"error": f"資料庫查詢失敗，錯誤訊息：{str(e)}"}), 500
@@ -694,12 +709,10 @@ def get_sales():
 def get_products():
     """API: 取得所有商品母體資料"""
     try:
-        conn = get_db_connection()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute('SELECT "商品ID" AS "商品id", "商品名稱", "群組名稱", "進貨單價", "販賣單價" FROM "商品清單" ORDER BY "商品ID";')
-        results = cur.fetchall()
-        cur.close()
-        conn.close()
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute('SELECT "商品ID" AS "商品id", "商品名稱", "群組名稱", "進貨單價", "販賣單價" FROM "商品清單" ORDER BY "商品ID";')
+                results = cur.fetchall()
         return jsonify(results)
     except Exception as e:
         return jsonify({"error": f"商品資料讀取失敗：{str(e)}"}), 500
@@ -708,16 +721,13 @@ def get_products():
 def get_customers():
     """API: 取得所有顧客客戶清單"""
     try:
-        conn = get_db_connection()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute('SELECT "顧客ID" AS "顧客id", "顧客名稱", "聯絡電話" FROM "顧客清單" ORDER BY "顧客ID";')
-        results = cur.fetchall()
-        cur.close()
-        conn.close()
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute('SELECT "顧客ID" AS "顧客id", "顧客名稱", "聯絡電話" FROM "顧客清單" ORDER BY "顧客ID";')
+                results = cur.fetchall()
         return jsonify(results)
     except Exception as e:
         return jsonify({"error": f"顧客資料讀取失敗：{str(e)}"}), 500
 
-# 移除原本的 app.run(debug=True)，保留這行供本地測試使用
 if __name__ == '__main__':
     app.run(debug=True)
