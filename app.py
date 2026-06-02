@@ -133,9 +133,9 @@ HTML_TEMPLATE = """
 
                 <div id="filter-block-date" class="filter-container align-items-center gap-3" style="display: none;">
                     <label for="start-date" class="form-label m-0 fw-bold text-secondary">📅 開始日期：</label>
-                    <input type="date" id="start-date" class="form-control" style="max-width: 200px;" value="2021-05-01">
+                    <input type="date" id="start-date" class="form-control" style="max-width: 200px;" value="2021-04-01">
                     <label for="end-date" class="form-label m-0 fw-bold text-secondary">📅 結束日期：</label>
-                    <input type="date" id="end-date" class="form-control" style="max-width: 200px;" value="2021-05-31">
+                    <input type="date" id="end-date" class="form-control" style="max-width: 200px;" value="2021-06-30">
                     <button class="btn btn-primary fw-bold" onclick="fetchSalesByDate()">🔍 篩選區間明細</button>
                 </div>
 
@@ -192,7 +192,6 @@ HTML_TEMPLATE = """
             document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active'));
             document.getElementById(`menu-${type}`).classList.add('active');
             
-            // 控管篩選區塊顯示
             filterBlock.style.display = (type === 'customer-stats') ? 'flex' : 'none';
             if (type === 'customer-stats') initCustomerDropdown();
 
@@ -243,7 +242,6 @@ HTML_TEMPLATE = """
             if (type === 'sales-by-group') { fetchSalesByGroup(); return; }
             if (type === 'sales-by-date') { fetchSalesByDate(); return; }
 
-            // 調用顧客排行榜 API
             if (type === 'customer-ranking') {
                 fetch('/api/customer-ranking').then(res => res.json()).then(data => {
                     title.innerText = '🏆 顧客貢獻度排行榜 (VVIP 總覽)';
@@ -252,7 +250,6 @@ HTML_TEMPLATE = """
                 return;
             }
 
-            // 調用業務排行榜 API
             if (type === 'sales-ranking') {
                 fetch('/api/sales-ranking').then(res => res.json()).then(data => {
                     title.innerText = '🏅 業務員業績排行榜 (Top Sales)';
@@ -261,7 +258,6 @@ HTML_TEMPLATE = """
                 return;
             }
 
-            // 新增：調用客戶活躍與忠誠度分析表 API
             if (type === 'customer-loyalty') {
                 fetch('/api/customer-loyalty').then(res => res.json()).then(data => {
                     title.innerText = '🏆 客戶活躍度與忠誠度分析表 (含零消費客戶)';
@@ -431,7 +427,7 @@ HTML_TEMPLATE = """
                 keys.forEach(key => {
                     let value = row[key];
                     if (value !== null && value !== undefined && 
-                        (key.includes('單價') || key.includes('金額') || key.includes('平均') || key.includes('銷售額') || key.includes('毛利') || key.includes('總額'))) {
+                        (key.includes('單價') || key.includes('金額') || key.includes('平均') || key.includes('銷售額') || key.includes('毛利') || key.includes('總額') || key.includes('流水小計'))) {
                         if (key.includes('率')) { value = parseFloat(value).toFixed(1) + '%'; }
                         else { const numValue = parseFloat(value); if (!isNaN(numValue)) value = '$' + Math.round(numValue).toLocaleString(); }
                     } else if (value === null || value === undefined) { value = '-'; }
@@ -475,7 +471,7 @@ def index():
 
 @app.route('/api/customer-loyalty')
 def get_customer_loyalty():
-    """API: 全新整合功能 - 客戶活躍度與忠誠度分析表 (使用 LEFT JOIN)"""
+    """API: 客戶活躍度與忠誠度分析表 (使用 LEFT JOIN)"""
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -484,7 +480,7 @@ def get_customer_loyalty():
                 c."顧客名稱",
                 COUNT(s."傳票編號") AS "訂單筆數"
             FROM "顧客清單" AS c
-            LEFT JOIN "銷售資料" AS s
+            LEFT JOIN "販賣資料" AS s
                 ON c."顧客ID" = s."顧客ID"
             GROUP BY c."顧客ID", c."顧客名稱"
             ORDER BY "訂單筆數" DESC;
@@ -507,8 +503,8 @@ def get_sales_ranking():
             SELECT
                 e."負責人姓名",
                 COUNT(*) AS "訂單筆數",
-                SUM(p."銷售單價" * s."數量") AS "銷售總額"
-            FROM "銷售資料" AS s
+                SUM(p."販賣單價" * s."數量") AS "銷售總額"
+            FROM "販賣資料" AS s
             INNER JOIN "負責人清單" AS e ON s."負責人ID" = e."負責人ID"
             INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
             GROUP BY e."負責人ID", e."負責人姓名"
@@ -529,8 +525,8 @@ def get_customer_ranking():
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         query = """
-            SELECT c."顧客名稱", COUNT(*) AS "訂單筆數", SUM(p."銷售單價" * s."數量") AS "總金額"
-            FROM "銷售資料" AS s
+            SELECT c."顧客名稱", COUNT(*) AS "訂單筆數", SUM(p."販賣單價" * s."數量") AS "總金額"
+            FROM "販賣資料" AS s
             INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
             INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID"
             GROUP BY c."顧客ID", c."顧客名稱" ORDER BY "總金額" DESC;
@@ -552,14 +548,14 @@ def get_sales_by_group():
         cur = conn.cursor(cursor_factory=RealDictCursor)
         if group_name == 'ALL':
             query = """
-                SELECT s."傳票編號", s."處理日期" AS "處理日", p."商品名稱", p."群組名稱", c."顧客名稱", s."數量"
-                FROM "銷售資料" AS s INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID" INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID" ORDER BY s."處理日期" ASC;
+                SELECT s."傳票編號", s."處理日", p."商品名稱", p."群組名稱", c."顧客名稱", s."數量"
+                FROM "販賣資料" AS s INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID" INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID" ORDER BY s."處理日" ASC;
             """
             cur.execute(query)
         else:
             query = """
-                SELECT s."傳票編號", s."處理日期" AS "處理日", p."商品名稱", p."群組名稱", c."顧客名稱", s."數量"
-                FROM "銷售資料" AS s INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID" INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID" WHERE p."群組名稱" = %s ORDER BY s."處理日期" ASC;
+                SELECT s."傳票編號", s."處理日", p."商品名稱", p."群組名稱", c."顧客名稱", s."數量"
+                FROM "販賣資料" AS s INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID" INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID" WHERE p."群組名稱" = %s ORDER BY s."處理日" ASC;
             """
             cur.execute(query, (group_name,))
         results = cur.fetchall()
@@ -572,18 +568,18 @@ def get_sales_by_group():
 @app.route('/api/sales-by-date')
 def get_sales_by_date():
     """API: 根據日期區間撈取報表"""
-    start_date = request.args.get('start', '2021-05-01')
-    end_date = request.args.get('end', '2021-05-31')
+    start_date = request.args.get('start', '2021-04-01')
+    end_date = request.args.get('end', '2021-06-30')
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         query = """
-            SELECT s."傳票編號", s."處理日期" AS "處理日", p."商品名稱", e."負責人姓名", c."顧客名稱", s."數量"
-            FROM "銷售資料" AS s
+            SELECT s."傳票編號", s."處理日", p."商品名稱", e."負責人姓名", c."顧客名稱", s."數量"
+            FROM "販賣資料" AS s
             INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
             INNER JOIN "負責人清單" AS e ON s."負責人ID" = e."負責人ID"
             INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID"
-            WHERE s."處理日期" BETWEEN %s AND %s ORDER BY s."處理日期" ASC;
+            WHERE s."處理日" BETWEEN %s AND %s ORDER BY s."處理日" ASC;
         """
         cur.execute(query, (start_date, end_date))
         results = cur.fetchall()
@@ -601,35 +597,35 @@ def get_dashboard_stats():
         cur = conn.cursor(cursor_factory=RealDictCursor)
         kpi_query = """
             SELECT 
-                COALESCE(SUM(p."銷售單價" * s."數量"), 0) AS total_sales,
-                COALESCE(SUM((p."銷售單價" - p."進貨單價") * s."數量"), 0) AS total_profit,
-                CASE WHEN SUM(p."銷售單價" * s."數量") > 0 THEN ROUND((SUM((p."銷售單價" - p."進貨單價") * s."數量") * 100.0 / SUM(p."銷售單價" * s."數量")), 1) ELSE 0 END AS margin_rate,
+                COALESCE(SUM(p."販賣單價" * s."數量"), 0) AS total_sales,
+                COALESCE(SUM((p."販賣單價" - p."進貨單價") * s."數量"), 0) AS total_profit,
+                CASE WHEN SUM(p."販賣單價" * s."數量") > 0 THEN ROUND((SUM((p."販賣單價" - p."進貨單價") * s."數量") * 100.0 / SUM(p."販賣單價" * s."數量")), 1) ELSE 0 END AS margin_rate,
                 COALESCE(SUM(s."數量"), 0) AS total_qty, COUNT(DISTINCT s."顧客ID") AS total_customers,
-                CASE WHEN COUNT(DISTINCT s."傳票編號") > 0 THEN COALESCE(SUM(p."銷售單價" * s."數量"), 0) / COUNT(DISTINCT s."傳票編號") ELSE 0 END AS avg_order_value
-            FROM "銷售資料" s LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID";
+                CASE WHEN COUNT(DISTINCT s."傳票編號") > 0 THEN COALESCE(SUM(p."販賣單價" * s."數量"), 0) / COUNT(DISTINCT s."傳票編號") ELSE 0 END AS avg_order_value
+            FROM "販賣資料" s LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID";
         """
         cur.execute(kpi_query)
         kpi_result = cur.fetchone()
 
         top_products_query = """
-            SELECT p."商品名稱", SUM(s."數量") AS "總銷售數量", SUM(p."銷售單價" * s."數量") AS "總銷售額", SUM((p."銷售單價" - p."進貨單價") * s."數量") AS "總創造毛利",
-                   ROUND((SUM((p."銷售單價" - p."進貨單價") * s."數量") * 100.0 / NULLIF(SUM(p."銷售單價" * s."數量"), 0)), 1) AS "單品毛利率"
-            FROM "銷售資料" s LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID" GROUP BY p."商品名稱" ORDER BY "總創造毛利" DESC LIMIT 5;
+            SELECT p."商品名稱", SUM(s."數量") AS "總銷售數量", SUM(p."販賣單價" * s."數量") AS "總銷售額", SUM((p."販賣單價" - p."進貨單價") * s."數量") AS "總創造毛利",
+                   ROUND((SUM((p."販賣單價" - p."進貨單價") * s."數量") * 100.0 / NULLIF(SUM(p."販賣單價" * s."數量"), 0)), 1) AS "單品毛利率"
+            FROM "販賣資料" s LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID" GROUP BY p."商品名稱" ORDER BY "總創造毛利" DESC LIMIT 5;
         """
         cur.execute(top_products_query)
         top_products = cur.fetchall()
 
         top_customers_query = """
-            SELECT c."顧客名稱", SUM(p."銷售單價" * s."數量") AS "總金額"
-            FROM "銷售資料" s INNER JOIN "商品清單" p ON s."商品ID" = p."商品ID" INNER JOIN "顧客清單" c ON s."顧客ID" = c."顧客ID"
+            SELECT c."顧客名稱", SUM(p."販賣單價" * s."數量") AS "總金額"
+            FROM "販賣資料" s INNER JOIN "商品清單" p ON s."商品ID" = p."商品ID" INNER JOIN "顧客清單" c ON s."顧客ID" = c."顧客ID"
             GROUP BY c."顧客ID", c."顧客名稱" ORDER BY "總金額" DESC LIMIT 5;
         """
         cur.execute(top_customers_query)
         top_customers = cur.fetchall()
 
         top_sales_query = """
-            SELECT e."負責人姓名", SUM(p."銷售單價" * s."數量") AS "銷售總額"
-            FROM "銷售資料" s INNER JOIN "負責人清單" e ON s."負責人ID" = e."負責人ID" INNER JOIN "商品清單" p ON s."商品ID" = p."商品ID"
+            SELECT e."負責人姓名", SUM(p."販賣單價" * s."數量") AS "銷售總額"
+            FROM "販賣資料" s INNER JOIN "負責人清單" e ON s."負責人ID" = e."負責人ID" INNER JOIN "商品清單" p ON s."商品ID" = p."商品ID"
             GROUP BY e."負責人ID", e."負責人姓名" ORDER BY "銷售總額" DESC LIMIT 5;
         """
         cur.execute(top_sales_query)
@@ -648,8 +644,8 @@ def get_customer_stats():
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         query = """
-            SELECT s."顧客ID", c."顧客名稱", MAX(p."商品名稱") AS "購買特定商品(文字最大值)", ROUND(AVG(p."銷售單價"), 0) AS "平均購買單價", SUM(s."數量") AS "累積購買總數量"
-            FROM "銷售資料" s LEFT JOIN "顧客清單" c ON s."顧客ID" = c."顧客ID" LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID" GROUP BY s."顧客ID", c."顧客名稱" ORDER BY s."顧客ID" ASC;
+            SELECT s."顧客ID", c."顧客名稱", MAX(p."商品名稱") AS "購買特定商品(文字最大值)", ROUND(AVG(p."販賣單價"), 0) AS "平均購買單價", SUM(s."數量") AS "累積購買總數量"
+            FROM "販賣資料" s LEFT JOIN "顧客清單" c ON s."顧客ID" = c."顧客ID" LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID" GROUP BY s."顧客ID", c."顧客名稱" ORDER BY s."顧客ID" ASC;
         """
         cur.execute(query)
         results = cur.fetchall()
@@ -661,14 +657,26 @@ def get_customer_stats():
 
 @app.route('/api/sales')
 def get_sales():
-    """API: 取得銷售流水帳"""
+    """API: 取得銷售流水帳 (四表 Join 完整總覽)"""
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         query = """
-            SELECT s."傳票編號", s."分錄編號", s."處理日期", p."商品名稱", p."銷售單價", s."數量", (p."銷售單價" * s."數量") AS "總金額", e."負責人姓名" AS "經辦員工", c."顧客名稱" AS "客戶名稱"
-            FROM "銷售資料" s LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID" LEFT JOIN "負責人清單" e ON s."負責人ID" = e."負責人ID" LEFT JOIN "顧客清單" c ON s."顧客ID" = c."顧客ID"
-            ORDER BY s."處理日期" DESC, s."傳票編號" ASC;
+            SELECT 
+                s."傳票編號", 
+                s."列編號", 
+                s."處理日", 
+                p."商品名稱", 
+                p."販賣單價", 
+                s."數量", 
+                (p."販賣單價" * s."數量") AS "流水小計", 
+                e."負責人姓名", 
+                c."顧客名稱"
+            FROM "販賣資料" AS s
+            INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
+            INNER JOIN "負責人清單" AS e ON s."負責人ID" = e."負責人ID"
+            INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID"
+            ORDER BY s."傳票編號" ASC, s."列編號" ASC;
         """
         cur.execute(query)
         results = cur.fetchall()
@@ -684,7 +692,7 @@ def get_products():
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute('SELECT "商品ID", "商品名稱", "群組名稱", "進貨單價", "銷售單價" FROM "商品清單" ORDER BY "商品ID";')
+        cur.execute('SELECT "商品ID", "商品名稱", "群組名稱", "進貨單價", "販賣單價" FROM "商品清單" ORDER BY "商品ID";')
         results = cur.fetchall()
         cur.close()
         conn.close()
@@ -698,7 +706,7 @@ def get_customers():
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute('SELECT "顧客ID", "顧客名稱", "連絡電話" FROM "顧客清單" ORDER BY "顧客ID";')
+        cur.execute('SELECT "顧客ID", "顧客名稱", "聯絡電話" FROM "顧客清單" ORDER BY "顧客ID";')
         results = cur.fetchall()
         cur.close()
         conn.close()
@@ -708,4 +716,3 @@ def get_customers():
 
 if __name__ == '__main__':
     app.run(debug=True)
-    ####注意
