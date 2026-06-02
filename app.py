@@ -25,7 +25,7 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3C 進銷存管理系統</title>
+    <title>3C 進銷存管理系統 (CRM 增強版)</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -41,6 +41,7 @@ HTML_TEMPLATE = """
         .kpi-title { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; color: #6c757d; }
         .kpi-value { font-size: 1.6rem; font-weight: 700; color: #343a40; }
         .chart-container { position: relative; height: 260px; width: 100%; display: flex; justify-content: center; align-items: center; }
+        .marketing-tip { background: #fff3cd; border-left: 5px solid #ffc107; padding: 12px; border-radius: 6px; margin-bottom: 15px; display: none; }
     </style>
 </head>
 <body>
@@ -50,11 +51,16 @@ HTML_TEMPLATE = """
                 <div class="p-3 text-center border-bottom border-secondary">
                     <h4 class="m-0">🏪 3C 零售系統</h4>
                 </div>
-                <div class="mt-3">
+                <div class="p-2 bg-primary text-center fw-bold text-white small">🎯 CRM 精準行銷模組</div>
+                <div class="mt-2">
+                    <a href="#customer-footprint" id="menu-customer-footprint" onclick="loadData('customer-footprint')">👣 客戶消費足跡總覽</a>
+                    <a href="#sleeping-members" id="menu-sleeping-members" onclick="loadData('sleeping-members')">💤 零消費沉睡會員</a>
+                </div>
+                <div class="p-2 border-top border-secondary text-center fw-bold text-muted small mt-2">📊 核心營運與數據</div>
+                <div>
                     <a href="#dashboard" id="menu-dashboard" onclick="loadData('dashboard')">🏠 營運儀表板</a>
                     <a href="#sales-ranking" id="menu-sales-ranking" onclick="loadData('sales-ranking')">🏅 業務業績排行</a>
                     <a href="#customer-ranking" id="menu-customer-ranking" onclick="loadData('customer-ranking')">🏆 顧客貢獻排行</a>
-                    <a href="#customer-loyalty" id="menu-customer-loyalty" onclick="loadData('customer-loyalty')">💎 客戶忠誠分析</a>
                     <a href="#dead-products" id="menu-dead-products" onclick="loadData('dead-products')">⚠️ 滯銷商品分析</a>
                     <a href="#sales-by-date" id="menu-sales-by-date" onclick="loadData('sales-by-date')">📅 區間銷售流水</a>
                     <a href="#sales-by-group" id="menu-sales-by-group" onclick="loadData('sales-by-group')">💻 商品群組銷貨</a>
@@ -69,6 +75,10 @@ HTML_TEMPLATE = """
                 <div class="d-flex justify-content-between align-items-center mb-4">
                     <h2 id="page-title" class="m-0">🏠 營運儀表板</h2>
                     <span class="badge bg-success p-2">Neon 雲端連線正常</span>
+                </div>
+
+                <div id="marketing-tip-box" class="marketing-tip">
+                    <strong>💡 精準行銷建議：</strong> <span id="marketing-tip-text"></span>
                 </div>
 
                 <div id="dashboard-cards" class="row g-3 mb-4">
@@ -181,7 +191,7 @@ HTML_TEMPLATE = """
         let salesChartInstance = null;
 
         document.addEventListener("DOMContentLoaded", function() {
-            loadData('dashboard');
+            loadData('customer-footprint'); // 預設進來直接看 CRM 客戶足跡
         });
 
         function loadData(type) {
@@ -194,10 +204,14 @@ HTML_TEMPLATE = """
             const filterBlockDate = document.getElementById('filter-block-date');
             const dashboardCards = document.getElementById('dashboard-cards');
             const chartBlock = document.getElementById('dashboard-chart-block');
+            const marketingTipBox = document.getElementById('marketing-tip-box');
+            const marketingTipText = document.getElementById('marketing-tip-text');
             
             document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active'));
-            document.getElementById(`menu-${type}`).classList.add('active');
+            const activeMenu = document.getElementById(`menu-${type}`);
+            if (activeMenu) activeMenu.classList.add('active');
             
+            // 控制篩選欄位與提示欄位顯示
             filterBlock.style.display = (type === 'customer-stats') ? 'flex' : 'none';
             if (type === 'customer-stats') initCustomerDropdown();
 
@@ -205,6 +219,16 @@ HTML_TEMPLATE = """
             if (type === 'sales-by-group') initGroupNameDropdown();
 
             filterBlockDate.style.display = (type === 'sales-by-date') ? 'flex' : 'none';
+
+            if (type === 'sleeping-members') {
+                marketingTipBox.style.display = 'block';
+                marketingTipText.innerText = '以下會員已完成系統註冊，但從未產生任何一筆消費交易。建議立即下載此名單，批量發送「首購 100 元折價券」或「迎新精美好禮簡訊」，刺激首購開張！';
+            } else if (type === 'customer-footprint') {
+                marketingTipBox.style.display = 'block';
+                marketingTipText.innerText = '此表結合了所有客戶與其歷史訂單，您可以一目了然看清「死忠大戶（有多筆訂單者）」與「新進客戶（僅一兩筆訂單者）」的分布型態，便於進行分群標籤。';
+            } else {
+                marketingTipBox.style.display = 'none';
+            }
 
             if (type === 'dashboard') {
                 dashboardCards.style.display = 'flex';
@@ -217,7 +241,7 @@ HTML_TEMPLATE = """
                 tableTitle.style.display = 'none';
             }
             
-            body.innerHTML = '<tr><td class="text-center py-4" colspan="10"><div class="spinner-border spinner-border-sm text-primary me-2"></div>讀取資料中，請稍候...</td></tr>';
+            body.innerHTML = '<tr><td class="text-center py-4" colspan="10"><div class="spinner-border spinner-border-sm text-primary me-2"></div>CRM 資料調取中，請稍候...</td></tr>';
 
             if (type === 'dashboard') {
                 fetch('/api/dashboard-stats')
@@ -248,6 +272,24 @@ HTML_TEMPLATE = """
             if (type === 'sales-by-group') { fetchSalesByGroup(); return; }
             if (type === 'sales-by-date') { fetchSalesByDate(); return; }
 
+            // 新增 CRM 功能的 API 調用
+            if (type === 'customer-footprint') {
+                fetch('/api/customer-footprint').then(res => res.json()).then(data => {
+                    title.innerText = '👣 客戶歷史消費足跡總覽 (大戶與新客分布)';
+                    renderTable(data);
+                });
+                return;
+            }
+
+            if (type === 'sleeping-members') {
+                fetch('/api/sleeping-members').then(res => res.json()).then(data => {
+                    title.innerText = '💤 零消費沉睡會員名單 (精準促銷目標)';
+                    renderTable(data);
+                });
+                return;
+            }
+
+            // 舊有的其餘 API 路由
             if (type === 'customer-ranking') {
                 fetch('/api/customer-ranking').then(res => res.json()).then(data => {
                     title.innerText = '🏆 顧客貢獻度排行榜 (VVIP 總覽)';
@@ -259,14 +301,6 @@ HTML_TEMPLATE = """
             if (type === 'sales-ranking') {
                 fetch('/api/sales-ranking').then(res => res.json()).then(data => {
                     title.innerText = '🏅 業務員業績排行榜 (Top Sales)';
-                    renderTable(data);
-                });
-                return;
-            }
-
-            if (type === 'customer-loyalty') {
-                fetch('/api/customer-loyalty').then(res => res.json()).then(data => {
-                    title.innerText = '🏆 客戶活躍度與忠誠度分析表 (含零消費客戶)';
                     renderTable(data);
                 });
                 return;
@@ -444,7 +478,13 @@ HTML_TEMPLATE = """
                         (key.includes('單價') || key.includes('金額') || key.includes('平均') || key.includes('銷售額') || key.includes('毛利') || key.includes('總額') || key.includes('流水小計'))) {
                         if (key.includes('率')) { value = parseFloat(value).toFixed(1) + '%'; }
                         else { const numValue = parseFloat(value); if (!isNaN(numValue)) value = '$' + Math.round(numValue).toLocaleString(); }
-                    } else if (value === null || value === undefined) { value = '-'; }
+                    } else if (value === null || value === undefined) { 
+                        if (key === '傳票編號' || key === '處理日期' || key === '購買數量') {
+                            value = '<span class="badge bg-secondary">無消費紀錄 (沉睡)</span>';
+                        } else {
+                            value = '-'; 
+                        }
+                    }
                     bodyHtml += `<td class="p-3">${value}</td>`;
                 });
                 bodyHtml += '</tr>';
@@ -476,82 +516,98 @@ HTML_TEMPLATE = """
 </html>
 """
 
-# --- 路由與 API 設定 ---
+# --- 🚀 新增 CRM 模組後端 API 路由 ---
+
+@app.route('/api/customer-footprint')
+def get_customer_footprint():
+    """API: 檢視完整的客戶歷史足跡 (大戶與沉睡客並存表)"""
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                query = """
+                    SELECT
+                        c."顧客ID" AS "顧客id",
+                        c."顧客名稱",
+                        c."聯絡電話",
+                        s."傳票編號",
+                        s."處理日" AS "處理日期",
+                        s."數量" AS "購買數量"
+                    FROM "顧客清單" AS c
+                    LEFT JOIN "販賣資料" AS s ON c."顧客ID" = s."顧客ID"
+                    ORDER BY c."顧客ID" ASC, s."傳票編號" ASC;
+                """
+                cur.execute(query)
+                results = cur.fetchall()
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": f"客戶消費足跡數據抓取失敗：{str(e)}"}), 500
+
+
+@app.route('/api/sleeping-members')
+def get_sleeping_members():
+    """API: 專門撈出「零消費沉睡會員」名單"""
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                query = """
+                    SELECT
+                        c."顧客ID" AS "顧客id",
+                        c."顧客名稱",
+                        c."聯絡電話",
+                        s."傳票編號"
+                    FROM "顧客清單" AS c
+                    LEFT JOIN "販賣資料" AS s ON c."顧客ID" = s."顧客ID"
+                    WHERE s."傳票編號" IS NULL
+                    ORDER BY c."顧客ID" ASC;
+                """
+                cur.execute(query)
+                results = cur.fetchall()
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": f"零消費沉睡會員名單抓取失敗：{str(e)}"}), 500
+
+# --- 舊有核心 API 路由 (均已更換為安全 with 連線架構) ---
 
 @app.route('/')
 def index():
-    """根目錄路由：顯式呈現首頁 HTML 範本"""
     return render_template_string(HTML_TEMPLATE)
 
 @app.route('/api/dead-products')
 def get_dead_products():
-    """API: 取得從未有過銷售紀錄的滯銷商品清單"""
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 query = """
-                    SELECT
-                        p."商品ID" AS "商品id",
-                        p."商品名稱",
-                        p."群組名稱"
-                    FROM "商品清單" AS p
-                    LEFT JOIN "販賣資料" AS s ON p."商品ID" = s."商品ID"
-                    WHERE s."傳票編號" IS NULL
-                    ORDER BY p."商品ID";
+                    SELECT p."商品ID" AS "商品id", p."商品名稱", p."群組名稱"
+                    FROM "商品清單" AS p LEFT JOIN "販賣資料" AS s ON p."商品ID" = s."商品ID"
+                    WHERE s."傳票編號" IS NULL ORDER BY p."商品ID";
                 """
                 cur.execute(query)
                 results = cur.fetchall()
         return jsonify(results)
     except Exception as e:
-        return jsonify({"error": f"滯銷商品數據抓取失敗：{str(e)}"}), 500
-
-@app.route('/api/customer-loyalty')
-def get_customer_loyalty():
-    """API: 客戶活躍度與忠誠度分析表"""
-    try:
-        with get_db_connection() as conn:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                query = """
-                    SELECT
-                        c."顧客名稱",
-                        COUNT(s."傳票編號") AS "訂單筆數"
-                    FROM "顧客清單" AS c
-                    LEFT JOIN "販賣資料" AS s ON c."顧客ID" = s."顧客ID"
-                    GROUP BY c."顧客ID", c."顧客名稱"
-                    ORDER BY "訂單筆數" DESC;
-                """
-                cur.execute(query)
-                results = cur.fetchall()
-        return jsonify(results)
-    except Exception as e:
-        return jsonify({"error": f"客戶活躍與忠誠度數據抓取失敗：{str(e)}"}), 500
+        return jsonify({"error": f"滯銷商品數據失敗：{str(e)}"}), 500
 
 @app.route('/api/sales-ranking')
 def get_sales_ranking():
-    """API: 業務員銷售業績排行榜"""
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 query = """
-                    SELECT
-                        e."負責人姓名",
-                        COUNT(*) AS "訂單筆數",
-                        SUM(p."販賣單價" * s."數量") AS "銷售總額"
+                    SELECT e."負責人姓名", COUNT(*) AS "訂單筆數", SUM(p."販賣單價" * s."數量") AS "銷售總額"
                     FROM "販賣資料" AS s
                     INNER JOIN "負責人清單" AS e ON s."負責人ID" = e."負責人ID"
                     INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
-                    GROUP BY e."負責人ID", e."負責人姓名"
-                    ORDER BY "銷售總額" DESC;
+                    GROUP BY e."負責人ID", e."負責人姓名" ORDER BY "銷售總額" DESC;
                 """
                 cur.execute(query)
                 results = cur.fetchall()
         return jsonify(results)
     except Exception as e:
-        return jsonify({"error": f"業務員銷售業績排行榜抓取失敗：{str(e)}"}), 500
+        return jsonify({"error": f"業務排行失敗：{str(e)}"}), 500
 
 @app.route('/api/customer-ranking')
 def get_customer_ranking():
-    """API: 顧客累積消費金額排行"""
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -566,35 +622,27 @@ def get_customer_ranking():
                 results = cur.fetchall()
         return jsonify(results)
     except Exception as e:
-        return jsonify({"error": f"顧客貢獻排行榜數據拉取失敗：{str(e)}"}), 500
+        return jsonify({"error": f"顧客貢獻排行失敗：{str(e)}"}), 500
 
 @app.route('/api/sales-by-group')
 def get_sales_by_group():
-    """API: 依據商品群組查詢銷售明細"""
     group_name = request.args.get('group_name', '電腦主機')
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 if group_name == 'ALL':
-                    query = """
-                        SELECT s."傳票編號", s."處理日", p."商品名稱", p."群組名稱", c."顧客名稱", s."數量"
-                        FROM "販賣資料" AS s INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID" INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID" ORDER BY s."處理日" ASC;
-                    """
+                    query = 'SELECT s."傳票編號", s."處理日", p."商品名稱", p."群組名稱", c."顧客名稱", s."數量" FROM "販賣資料" AS s INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID" INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID" ORDER BY s."處理日" ASC;'
                     cur.execute(query)
                 else:
-                    query = """
-                        SELECT s."傳票編號", s."處理日", p."商品名稱", p."群組名稱", c."顧客名稱", s."數量"
-                        FROM "販賣資料" AS s INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID" INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID" WHERE p."群組名稱" = %s ORDER BY s."處理日" ASC;
-                    """
+                    query = 'SELECT s."傳票編號", s."處理日", p."商品名稱", p."群組名稱", c."顧客名稱", s."數量" FROM "販賣資料" AS s INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID" INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID" WHERE p."群組名稱" = %s ORDER BY s."處理日" ASC;'
                     cur.execute(query, (group_name,))
                 results = cur.fetchall()
         return jsonify(results)
     except Exception as e:
-        return jsonify({"error": f"商品群組明細查詢失敗：{str(e)}"}), 500
+        return jsonify({"error": f"商品群組查詢失敗：{str(e)}"}), 500
 
 @app.route('/api/sales-by-date')
 def get_sales_by_date():
-    """API: 根據日期區間撈取報表"""
     start_date = request.args.get('start', '2021-04-01')
     end_date = request.args.get('end', '2021-06-30')
     try:
@@ -602,28 +650,23 @@ def get_sales_by_date():
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 query = """
                     SELECT s."傳票編號", s."處理日", p."商品名稱", e."負責人姓名", c."顧客名稱", s."數量"
-                    FROM "販賣資料" AS s
-                    INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
-                    INNER JOIN "負責人清單" AS e ON s."負責人ID" = e."負責人ID"
-                    INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID"
+                    FROM "販賣資料" AS s INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID" INNER JOIN "負責人清單" AS e ON s."負責人ID" = e."負責人ID" INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID"
                     WHERE s."處理日" BETWEEN %s AND %s ORDER BY s."處理日" ASC;
                 """
                 cur.execute(query, (start_date, end_date))
                 results = cur.fetchall()
         return jsonify(results)
     except Exception as e:
-        return jsonify({"error": f"日期區間銷售流水抓取失敗：{str(e)}"}), 500
+        return jsonify({"error": f"日期區間查詢失敗：{str(e)}"}), 500
 
 @app.route('/api/dashboard-stats')
 def get_dashboard_stats():
-    """API: 綜合計算儀表板核心指標"""
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 kpi_query = """
                     SELECT 
-                        COALESCE(SUM(p."販賣單價" * s."數量"), 0) AS total_sales,
-                        COALESCE(SUM((p."販賣單價" - p."進貨單價") * s."數量"), 0) AS total_profit,
+                        COALESCE(SUM(p."販賣單價" * s."數量"), 0) AS total_sales, COALESCE(SUM((p."販賣單價" - p."進貨單價") * s."數量"), 0) AS total_profit,
                         CASE WHEN SUM(p."販賣單價" * s."數量") > 0 THEN ROUND((SUM((p."販賣單價" - p."進貨單價") * s."數量") * 100.0 / SUM(p."販賣單價" * s."數量")), 1) ELSE 0 END AS margin_rate,
                         COALESCE(SUM(s."數量"), 0) AS total_qty, COUNT(DISTINCT s."顧客ID") AS total_customers,
                         CASE WHEN COUNT(DISTINCT s."傳票編號") > 0 THEN COALESCE(SUM(p."販賣單價" * s."數量"), 0) / COUNT(DISTINCT s."傳票編號") ELSE 0 END AS avg_order_value
@@ -632,82 +675,47 @@ def get_dashboard_stats():
                 cur.execute(kpi_query)
                 kpi_result = cur.fetchone()
 
-                top_products_query = """
-                    SELECT p."商品名稱", SUM(s."數量") AS "總銷售數量", SUM(p."販賣單價" * s."數量") AS "總銷售額", SUM((p."販賣單價" - p."進貨單價") * s."數量") AS "總創造毛利",
-                           ROUND((SUM((p."販賣單價" - p."進貨單價") * s."數量") * 100.0 / NULLIF(SUM(p."販賣單價" * s."數量"), 0)), 1) AS "單品毛利率"
-                    FROM "販賣資料" s LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID" GROUP BY p."商品名稱" ORDER BY "總創造毛利" DESC LIMIT 5;
-                """
+                top_products_query = 'SELECT p."商品名稱", SUM(s."數量") AS "總銷售數量", SUM(p."販賣單價" * s."數量") AS "總銷售額", SUM((p."販賣單價" - p."進貨單價") * s."數量") AS "總創造毛利", ROUND((SUM((p."販賣單價" - p."進貨單價") * s."數量") * 100.0 / NULLIF(SUM(p."販賣單價" * s."數量"), 0)), 1) AS "單品毛利率" FROM "販賣資料" s LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID" GROUP BY p."商品名稱" ORDER BY "總創造毛利" DESC LIMIT 5;'
                 cur.execute(top_products_query)
                 top_products = cur.fetchall()
 
-                top_customers_query = """
-                    SELECT c."顧客名稱", SUM(p."販賣單價" * s."數量") AS "總金額"
-                    FROM "販賣資料" s INNER JOIN "商品清單" p ON s."商品ID" = p."商品ID" INNER JOIN "顧客清單" c ON s."顧客ID" = c."顧客ID"
-                    GROUP BY c."顧客ID", c."顧客名稱" ORDER BY "總金額" DESC LIMIT 5;
-                """
+                top_customers_query = 'SELECT c."顧客名稱", SUM(p."販賣單價" * s."數量") AS "總金額" FROM "販賣資料" s INNER JOIN "商品清單" p ON s."商品ID" = p."商品ID" INNER JOIN "顧客清單" c ON s."顧客ID" = c."顧客ID" GROUP BY c."顧客ID", c."顧客名稱" ORDER BY "總金額" DESC LIMIT 5;'
                 cur.execute(top_customers_query)
                 top_customers = cur.fetchall()
 
-                top_sales_query = """
-                    SELECT e."負責人姓名", SUM(p."販賣單價" * s."數量") AS "銷售總額"
-                    FROM "販賣資料" s INNER JOIN "負責人清單" e ON s."負責人ID" = e."負責人ID" INNER JOIN "商品清單" p ON s."商品ID" = p."商品ID"
-                    GROUP BY e."負責人ID", e."負責人姓名" ORDER BY "銷售總額" DESC LIMIT 5;
-                """
+                top_sales_query = 'SELECT e."負責人姓名", SUM(p."販賣單價" * s."數量") AS "銷售總額" FROM "販賣資料" s INNER JOIN "負責人清單" e ON s."負責人ID" = e."負責人ID" INNER JOIN "商品清單" p ON s."商品ID" = p."商品ID" GROUP BY e."負責人ID", e."負責人姓名" ORDER BY "銷售總額" DESC LIMIT 5;'
                 cur.execute(top_sales_query)
                 top_sales = cur.fetchall()
-
         return jsonify({"kpi": kpi_result, "top_products": top_products, "top_customers": top_customers, "top_sales": top_sales})
     except Exception as e:
-        return jsonify({"error": f"儀表板數據統計失敗，錯誤訊息：{str(e)}"}), 500
+        return jsonify({"error": f"儀表板失敗：{str(e)}"}), 500
 
 @app.route('/api/customer-stats')
 def get_customer_stats():
-    """API: 取得顧客消費統計分析"""
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                query = """
-                    SELECT s."顧客ID" AS "顧客id", c."顧客名稱", MAX(p."商品名稱") AS "購買特定商品(文字最大值)", ROUND(AVG(p."販賣單價"), 0) AS "平均購買單價", SUM(s."數量") AS "累積購買總數量"
-                    FROM "販賣資料" s LEFT JOIN "顧客清單" c ON s."顧客ID" = c."顧客ID" LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID" GROUP BY s."顧客ID", c."顧客名稱" ORDER BY s."顧客ID" ASC;
-                """
+                query = 'SELECT s."顧客ID" AS "顧客id", c."顧客名稱", MAX(p."商品名稱") AS "購買特定商品(文字最大值)", ROUND(AVG(p."販賣單價"), 0) AS "平均購買單價", SUM(s."數量") AS "累積購買總數量" FROM "販賣資料" s LEFT JOIN "顧客清單" c ON s."顧客ID" = c."顧客ID" LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID" GROUP BY s."顧客ID", c."顧客名稱" ORDER BY s."顧客ID" ASC;'
                 cur.execute(query)
                 results = cur.fetchall()
         return jsonify(results)
     except Exception as e:
-        return jsonify({"error": f"統計資料分析失敗，錯誤訊息：{str(e)}"}), 500
+        return jsonify({"error": f"顧客消費統計失敗：{str(e)}"}), 500
 
 @app.route('/api/sales')
 def get_sales():
-    """API: 取得銷售流水帳"""
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                query = """
-                    SELECT 
-                        s."傳票編號", 
-                        s."列編號", 
-                        s."處理日", 
-                        p."商品名稱", 
-                        p."販賣單價", 
-                        s."數量", 
-                        (p."販賣單價" * s."數量") AS "流水小計", 
-                        e."負責人姓名", 
-                        c."顧客名稱"
-                    FROM "販賣資料" AS s
-                    INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
-                    INNER JOIN "負責人清單" AS e ON s."負責人ID" = e."負責人ID"
-                    INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID"
-                    ORDER BY s."傳票編號" ASC, s."列編號" ASC;
-                """
+                query = 'SELECT s."傳票編號", s."列編號", s."處理日", p."商品名稱", p."販賣單價", s."數量", (p."販賣單價" * s."數量") AS "流水小計", e."負責人姓名", c."顧客名稱" FROM "販賣資料" AS s INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID" INNER JOIN "負責人清單" AS e ON s."負責人ID" = e."負責人ID" INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID" ORDER BY s."傳票編號" ASC, s."列編號" ASC;'
                 cur.execute(query)
                 results = cur.fetchall()
         return jsonify(results)
     except Exception as e:
-        return jsonify({"error": f"資料庫查詢失敗，錯誤訊息：{str(e)}"}), 500
+        return jsonify({"error": f"銷售流水帳失敗：{str(e)}"}), 500
 
 @app.route('/api/products')
 def get_products():
-    """API: 取得所有商品母體資料"""
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -715,11 +723,10 @@ def get_products():
                 results = cur.fetchall()
         return jsonify(results)
     except Exception as e:
-        return jsonify({"error": f"商品資料讀取失敗：{str(e)}"}), 500
+        return jsonify({"error": f"商品資料失敗：{str(e)}"}), 500
 
 @app.route('/api/customers')
 def get_customers():
-    """API: 取得所有顧客客戶清單"""
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -727,7 +734,7 @@ def get_customers():
                 results = cur.fetchall()
         return jsonify(results)
     except Exception as e:
-        return jsonify({"error": f"顧客資料讀取失敗：{str(e)}"}), 500
+        return jsonify({"error": f"顧客資料失敗：{str(e)}"}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
