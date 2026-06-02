@@ -18,7 +18,7 @@ def get_db_connection():
     conn = psycopg2.connect(DATABASE_URL, sslmode='require')
     return conn
 
-# --- 前端 HTML 範本 (整合 CRM 與 業務考核 雙模組) ---
+# --- 前端 HTML 範本 (整合 CRM 與 業務考核 雙模組 + 組合商品交叉分析) ---
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="zh-TW">
@@ -57,6 +57,7 @@ HTML_TEMPLATE = """
                 <div class="mt-1">
                     <a href="#customer-footprint" id="menu-customer-footprint" onclick="loadData('customer-footprint')">👣 客戶消費足跡總覽</a>
                     <a href="#sleeping-members" id="menu-sleeping-members" onclick="loadData('sleeping-members')">💤 零消費沉睡會員</a>
+                    <a href="#cross-selling" id="menu-cross-selling" onclick="loadData('cross-selling')">🛒 組合商品交叉分析</a>
                 </div>
 
                 <div class="p-2 bg-success text-center fw-bold text-white small mt-2">🏅 業務績效考核模組</div>
@@ -202,6 +203,13 @@ HTML_TEMPLATE = """
                     </select>
                 </div>
 
+                <!-- 🚀 組合商品交叉分析專用動態變數篩選器 -->
+                <div id="filter-block-cross" class="filter-container align-items-center gap-3" style="display: none;">
+                    <label for="target-product-select" class="form-label m-0 fw-bold text-secondary">🔮 選擇基準分析商品：</label>
+                    <select id="target-product-select" class="form-select" style="max-width: 350px;" onchange="fetchCrossSellingAnalysis()">
+                    </select>
+                </div>
+
                 <div class="card p-4 bg-white">
                     <h5 id="table-title" class="mb-3 text-secondary" style="display:none;">🔥 Top 5 高毛利商品明細排行</h5>
                     <div class="table-responsive">
@@ -219,14 +227,14 @@ HTML_TEMPLATE = """
     </div>
 
     <script>
-        let currentActiveModule = 'customer-footprint'; // 追蹤業務模組目前點選的是明細還是購買偏好
+        let currentActiveModule = 'customer-footprint'; 
         let cachedStatsData = [];
         let profitChartInstance = null;
         let customerChartInstance = null;
         let salesChartInstance = null;
 
         document.addEventListener("DOMContentLoaded", function() {
-            loadData('customer-footprint'); // 預設進來直接看 CRM 客戶足跡
+            loadData('customer-footprint'); 
         });
 
         function loadData(type) {
@@ -239,6 +247,7 @@ HTML_TEMPLATE = """
             const filterBlockGroup = document.getElementById('filter-block-group');
             const filterBlockDate = document.getElementById('filter-block-date');
             const filterBlockSales = document.getElementById('filter-block-sales');
+            const filterBlockCross = document.getElementById('filter-block-cross');
             
             const dashboardCards = document.getElementById('dashboard-cards');
             const chartBlock = document.getElementById('dashboard-chart-block');
@@ -250,14 +259,13 @@ HTML_TEMPLATE = """
             const activeMenu = document.getElementById(`menu-${type}`);
             if (activeMenu) activeMenu.classList.add('active');
             
-            // 控管業務模組動態篩選器
+            // 控管篩選器 UI 顯示
             filterBlockSales.style.display = (type === 'sales-detail-check' || type === 'customer-preference') ? 'flex' : 'none';
             if (type === 'sales-detail-check' || type === 'customer-preference') {
                 currentActiveModule = type;
                 initSalesStaffDropdown();
             }
 
-            // 其餘一般篩選器控制
             filterBlock.style.display = (type === 'customer-stats') ? 'flex' : 'none';
             if (type === 'customer-stats') initCustomerDropdown();
 
@@ -265,17 +273,23 @@ HTML_TEMPLATE = """
             if (type === 'sales-by-group') initGroupNameDropdown();
 
             filterBlockDate.style.display = (type === 'sales-by-date') ? 'flex' : 'none';
+            
+            // 控制交叉組合分析篩選器
+            filterBlockCross.style.display = (type === 'cross-selling') ? 'flex' : 'none';
+            if (type === 'cross-selling') initTargetProductDropdown();
 
-            // 控制 KPI 面板與業績獎金面板
             salesBonusPanel.style.display = (type === 'sales-detail-check') ? 'flex' : 'none';
 
-            // 控制 CRM 精準行銷提示區
+            // 控制 CRM 精準行銷提示區內容
             if (type === 'sleeping-members') {
                 marketingTipBox.style.display = 'block';
-                marketingTipText.innerText = '以下會員已完成系統註冊，但從未產生任何一筆消費交易。建議立即下載此名單，批量發送「首購 100 元折價券」或「迎新精美好禮簡訊」，刺激首購開張！';
+                marketingTipText.innerText = '以下會員已完成系統註冊，但從未產生 any 一筆消費交易。建議立即下載此名單，批量發送「首購 100 元折價券」或「迎新精美好禮簡訊」，刺激首購開張！';
             } else if (type === 'customer-footprint') {
                 marketingTipBox.style.display = 'block';
                 marketingTipText.innerText = '此表結合了所有客戶與其歷史訂單，您可以一目了然看清「死忠大戶（有多筆訂單者）」與「新進客戶（僅一兩筆訂單者）」的分布型態，便於進行分群標籤。';
+            } else if (type === 'cross-selling') {
+                marketingTipBox.style.display = 'block';
+                marketingTipText.innerText = '數據交叉大發現！系統會自動揪出「買過此基準商品」的客群，並算出他們「還買了哪些其他東西」。這能完美幫助你規劃多入組促銷（如買筆電加購滑鼠）或是網頁的「猜你喜歡」熱門推薦商品組合！';
             } else {
                 marketingTipBox.style.display = 'none';
             }
@@ -326,6 +340,7 @@ HTML_TEMPLATE = """
 
             if (type === 'sales-by-group') { fetchSalesByGroup(); return; }
             if (type === 'sales-by-date') { fetchSalesByDate(); return; }
+            if (type === 'cross-selling') { fetchCrossSellingAnalysis(); return; }
 
             // CRM 模組 API 調用
             if (type === 'customer-footprint') {
@@ -391,6 +406,54 @@ HTML_TEMPLATE = """
                 });
         }
 
+        // 初始化基準分析商品下拉選單
+        function initTargetProductDropdown() {
+            const select = document.getElementById('target-product-select');
+            if (select.options.length > 0) return;
+
+            fetch('/api/products')
+                .then(res => res.json())
+                .then(products => {
+                    if (products && !products.error) {
+                        products.forEach((p) => {
+                            const opt = document.createElement('option');
+                            opt.value = p['商品id'];
+                            opt.innerHTML = `📦 [ID: ${p['商品id']}] ${p['商品名稱']} (${p['群組名稱']})`;
+                            // 預設鎖定商品ID=2 (筆記型電腦)
+                            if (p['商品id'].toString() === '2') opt.selected = true;
+                            select.appendChild(opt);
+                        });
+                        fetchCrossSellingAnalysis();
+                    }
+                });
+        }
+
+        // 撈取組合商品交叉銷售數據分析
+        function fetchCrossSellingAnalysis() {
+            const select = document.getElementById('target-product-select');
+            if (select.options.length === 0) return;
+
+            const productId = select.value;
+            const selectedText = select.options[select.selectedIndex].text;
+            const title = document.getElementById('page-title');
+            const body = document.getElementById('table-body');
+            const head = document.getElementById('table-head');
+
+            title.innerText = `🛒 熱門潛在組合分析：買過 [${selectedText.split(') ')[1] || selectedText}] 的人還買了...`;
+            body.innerHTML = '<tr><td class="text-center py-4" colspan="10"><div class="spinner-border spinner-border-sm text-primary me-2"></div>正在進行關聯組合大數據交叉計算...</td></tr>';
+
+            fetch(`/api/cross-selling-analysis?target_product_id=${productId}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (!data || data.error || data.length === 0) {
+                        head.innerHTML = '';
+                        body.innerHTML = `<tr><td class="text-center py-4 text-muted" colspan="10">⚠️ 沒有與此商品產生交叉購買紀錄的其他品項</td></tr>`;
+                        return;
+                    }
+                    renderTable(data);
+                });
+        }
+
         // 初始化業務員動態下拉選單
         function initSalesStaffDropdown() {
             const select = document.getElementById('sales-staff-select');
@@ -402,7 +465,6 @@ HTML_TEMPLATE = """
                     if (staffList && !staffList.error) {
                         staffList.forEach((staff, index) => {
                             const opt = document.createElement('option');
-                            // 因為 sales-ranking 吐出的 JSON 包含 負責人姓名，我們需要拉出他的 ID。若系統原架構為姓名，改用姓名配對
                             opt.value = staff['負責人姓名']; 
                             opt.innerHTML = `👤 業務同仁：${staff['負責人姓名']}`;
                             if (index === 0) opt.selected = true;
@@ -438,7 +500,7 @@ HTML_TEMPLATE = """
                         const summary = data.summary;
                         document.getElementById('bonus-total-sales').innerText = '$' + Math.round(summary.total_sales).toLocaleString();
                         document.getElementById('bonus-total-profit').innerText = '$' + Math.round(summary.total_profit).toLocaleString();
-                        document.getElementById('bonus-calculated').innerText = '$' + Math.round(summary.total_sales * 0.05).toLocaleString(); // 5% 獎金
+                        document.getElementById('bonus-calculated').innerText = '$' + Math.round(summary.total_sales * 0.05).toLocaleString(); 
                         
                         renderTable(data.sales_detail);
                     });
@@ -573,11 +635,11 @@ HTML_TEMPLATE = """
                 keys.forEach(key => {
                     let value = row[key];
                     if (value !== null && value !== undefined && 
-                        (key.includes('單價') || key.includes('金額') || key.includes('平均') || key.includes('銷售額') || key.includes('毛利') || key.includes('總額') || key.includes('小計') || key.includes('流水小計') || key.includes('貢獻預算'))) {
+                        (key.includes('單價') || key.includes('金額') || key.includes('平均') || key.includes('銷售額') || key.includes('毛利') || key.includes('總額') || key.includes('小計') || key.includes('流水小計') || key.includes('貢獻預算') || key.includes('交叉貢獻'))) {
                         if (key.includes('率')) { value = parseFloat(value).toFixed(1) + '%'; }
                         else { const numValue = parseFloat(value); if (!isNaN(numValue)) value = '$' + Math.round(numValue).toLocaleString(); }
                     } else if (value === null || value === undefined) { 
-                        if (key === '傳票編號' || key === '處理日期' || key === '購買數量') {
+                        if (key === '傳票編號' || key === '處理 Birch' || key === '處理日期' || key === '購買數量') {
                             value = '<span class="badge bg-secondary">無消費紀錄 (沉睡)</span>';
                         } else { value = '-'; }
                     }
@@ -612,11 +674,59 @@ HTML_TEMPLATE = """
 </html>
 """
 
-# --- 🚀 新增或修正的「業務績效考核模組」後端 API 路由 ---
+# --- 🚀 新增：熱門組合商品交叉銷售分析 API ---
+@app.route('/api/cross-selling-analysis')
+def get_cross_selling_analysis():
+    """API: 輸入基準商品ID，找出買過該商品的客群，還買了哪些「其他商品」的排名累計"""
+    target_product_id = request.args.get('target_product_id')
+    if not target_product_id:
+        return jsonify({"error": "缺少基準商品 ID"}), 400
+        
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                query = """
+                    WITH TargetCustomers AS (
+                        -- 1. 先找出買過該基準商品的所有不重複顧客 ID
+                        SELECT DISTINCT "顧客ID"
+                        FROM "販賣資料"
+                        WHERE "商品ID" = %s
+                    ),
+                    OtherPurchases AS (
+                        -- 2. 抓出這群客戶買過的所有「其他商品」紀錄
+                        SELECT 
+                            s."顧客ID",
+                            s."傳票編號",
+                            p."商品ID",
+                            p."商品名稱",
+                            p."群組名稱",
+                            s."數量"
+                        FROM "販賣資料" AS s
+                        INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
+                        WHERE s."顧客ID" IN (SELECT "顧客ID" FROM TargetCustomers)
+                          AND s."商品ID" <> %s  -- 排除掉基準商品本身
+                    )
+                    -- 3. 統計這些群組商品的累積數量與銷售總額，做熱門排行
+                    SELECT 
+                        "商品名稱",
+                        "群組名稱",
+                        COUNT(DISTINCT "顧客ID") AS "購買客戶數",
+                        SUM("數量") AS "累積購買總數量",
+                        SUM("數量" * "販賣單價") AS "交叉貢獻總金額"
+                    FROM OtherPurchases s
+                    INNER JOIN "商品清單" p ON s."商品ID" = p."商品ID"
+                    GROUP BY p."商品ID", "商品名稱", "群組名稱"
+                    ORDER BY "累積購買總數量" DESC, "交叉貢獻總金額" DESC;
+                """
+                cur.execute(query, (target_product_id, target_product_id))
+                results = cur.fetchall()
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": f"交叉銷售分析失敗：{str(e)}"}), 500
 
+# --- 🚀 既有業務績效考核模組後端 API 路由 ---
 @app.route('/api/sales-detail-by-staff')
 def get_sales_detail_by_staff():
-    """API: 透過動態業務姓名(staff_name) 安全防禦撈取其流水帳明細並計算業績毛利"""
     staff_name = request.args.get('staff_name')
     if not staff_name:
         return jsonify({"error": "缺少業務負責人姓名"}), 400
@@ -624,7 +734,6 @@ def get_sales_detail_by_staff():
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                # 1. 撈取該業務員的每筆銷售流水明細
                 query_detail = """
                     SELECT
                         s."傳票編號",
@@ -646,7 +755,6 @@ def get_sales_detail_by_staff():
                 cur.execute(query_detail, (staff_name,))
                 sales_detail = cur.fetchall()
                 
-                # 2. 彙總該業務員的總銷售額、總毛利額
                 query_summary = """
                     SELECT 
                         COALESCE(SUM(p."販賣單價" * s."數量"), 0) AS total_sales,
@@ -663,10 +771,8 @@ def get_sales_detail_by_staff():
     except Exception as e:
         return jsonify({"error": f"業務績效明細抓取失敗：{str(e)}"}), 500
 
-
 @app.route('/api/customer-preference-by-staff')
 def get_customer_preference_by_staff():
-    """API: 透過動態業務姓名(staff_name) 追蹤該業務經手的客戶商品偏好分佈"""
     staff_name = request.args.get('staff_name')
     if not staff_name:
         return jsonify({"error": "缺少業務負責人姓名"}), 400
@@ -696,10 +802,8 @@ def get_customer_preference_by_staff():
         return jsonify({"error": f"客戶購買偏好追蹤失敗：{str(e)}"}), 500
 
 # --- 🚀 既有 CRM 精準行銷模組後端 API 路由 ---
-
 @app.route('/api/customer-footprint')
 def get_customer_footprint():
-    """API: 檢視完整的客戶歷史足跡 (大戶與沉睡客並存表)"""
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -721,10 +825,8 @@ def get_customer_footprint():
     except Exception as e:
         return jsonify({"error": f"客戶消費足跡數據抓取失敗：{str(e)}"}), 500
 
-
 @app.route('/api/sleeping-members')
 def get_sleeping_members():
-    """API: 專門撈出「零消費沉睡會員」名單"""
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -746,7 +848,6 @@ def get_sleeping_members():
         return jsonify({"error": f"零消費沉睡會員名單抓取失敗：{str(e)}"}), 500
 
 # --- 既有核心數據營運 API 路由 ---
-
 @app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE)
