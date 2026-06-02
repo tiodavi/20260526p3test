@@ -49,6 +49,7 @@ HTML_TEMPLATE = """
                     <a href="#dashboard" id="menu-dashboard" onclick="loadData('dashboard')">🏠 營運儀表板</a>
                     <a href="#sales-ranking" id="menu-sales-ranking" onclick="loadData('sales-ranking')">🏅 業務業績排行</a>
                     <a href="#customer-ranking" id="menu-customer-ranking" onclick="loadData('customer-ranking')">🏆 顧客貢獻排行</a>
+                    <a href="#customer-loyalty" id="menu-customer-loyalty" onclick="loadData('customer-loyalty')">💎 客戶忠誠分析</a>
                     <a href="#sales-by-date" id="menu-sales-by-date" onclick="loadData('sales-by-date')">📅 區間銷售流水</a>
                     <a href="#sales-by-group" id="menu-sales-by-group" onclick="loadData('sales-by-group')">💻 商品群組銷貨</a>
                     <a href="#sales" id="menu-sales" onclick="loadData('sales')">📊 銷售流水帳</a>
@@ -132,16 +133,16 @@ HTML_TEMPLATE = """
 
                 <div id="filter-block-date" class="filter-container align-items-center gap-3" style="display: none;">
                     <label for="start-date" class="form-label m-0 fw-bold text-secondary">📅 開始日期：</label>
-                    <input type="date" id="start-date" class="form-control" style="max-width: 200px;" value="2021-05-01">
+                    <input type="date" id="start-date" class="form-control" style="max-width: 200px;" value="2021-04-01">
                     <label for="end-date" class="form-label m-0 fw-bold text-secondary">📅 結束日期：</label>
-                    <input type="date" id="end-date" class="form-control" style="max-width: 200px;" value="2021-05-31">
+                    <input type="date" id="end-date" class="form-control" style="max-width: 200px;" value="2021-06-30">
                     <button class="btn btn-primary fw-bold" onclick="fetchSalesByDate()">🔍 篩選區間明細</button>
                 </div>
 
                 <div id="filter-block-group" class="filter-container align-items-center gap-3" style="display: none;">
                     <label for="group-name-select" class="form-label m-0 fw-bold text-secondary">🔍 選擇商品群組：</label>
                     <select id="group-name-select" class="form-select" style="max-width: 300px;" onchange="fetchSalesByGroup()">
-                        </select>
+                    </select>
                 </div>
 
                 <div id="filter-block" class="filter-container align-items-center gap-3" style="display: none;">
@@ -251,7 +252,15 @@ HTML_TEMPLATE = """
 
             if (type === 'sales-ranking') {
                 fetch('/api/sales-ranking').then(res => res.json()).then(data => {
-                    title.innerText = '🏅 業務員業績業績排行榜 (Top Sales)';
+                    title.innerText = '🏅 業務員業績排行榜 (Top Sales)';
+                    renderTable(data);
+                });
+                return;
+            }
+
+            if (type === 'customer-loyalty') {
+                fetch('/api/customer-loyalty').then(res => res.json()).then(data => {
+                    title.innerText = '🏆 客戶活躍度與忠誠度分析表 (含零消費客戶)';
                     renderTable(data);
                 });
                 return;
@@ -357,29 +366,44 @@ HTML_TEMPLATE = """
             });
         }
 
-        function renderCustomerBarChart(customerData) {
+        function renderCustomerBarChart(customersData) {
             const ctx = document.getElementById('customerBarChart').getContext('2d');
             if (customerChartInstance) customerChartInstance.destroy();
+            const labels = customersData.map(item => item['顧客名稱']);
+            const totals = customersData.map(item => item['總金額']);
             customerChartInstance = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: customerData.map(item => item['顧客名稱']),
-                    datasets: [{ label: '消費總額', data: customerData.map(item => item['總金額']), backgroundColor: '#6f42c1' }]
+                    labels: labels,
+                    datasets: [{ label: '消費額', data: totals, backgroundColor: '#6f42c1', borderRadius: 4 }]
                 },
-                options: { responsive: true, maintainAspectRatio: false }
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true } }
+                }
             });
         }
 
         function renderSalesBarChart(salesData) {
             const ctx = document.getElementById('salesBarChart').getContext('2d');
             if (salesChartInstance) salesChartInstance.destroy();
+            const labels = salesData.map(item => item['負責人姓名']);
+            const totals = salesData.map(item => item['銷售總額']);
             salesChartInstance = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: salesData.map(item => item['負責人姓名']),
-                    datasets: [{ label: '銷售總額', data: salesData.map(item => item['銷售總額']), backgroundColor: '#fd7e14' }]
+                    labels: labels,
+                    datasets: [{ label: '銷售總額', data: totals, backgroundColor: '#198754', borderRadius: 4 }]
                 },
-                options: { responsive: true, maintainAspectRatio: false }
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { x: { beginAtZero: true } }
+                }
             });
         }
 
@@ -403,7 +427,7 @@ HTML_TEMPLATE = """
                 keys.forEach(key => {
                     let value = row[key];
                     if (value !== null && value !== undefined && 
-                        (key.includes('單價') || key.includes('金額') || key.includes('平均') || key.includes('銷售額') || key.includes('毛利') || key.includes('總額'))) {
+                        (key.includes('單價') || key.includes('金額') || key.includes('平均') || key.includes('銷售額') || key.includes('毛利') || key.includes('總額') || key.includes('流水小計'))) {
                         if (key.includes('率')) { value = parseFloat(value).toFixed(1) + '%'; }
                         else { const numValue = parseFloat(value); if (!isNaN(numValue)) value = '$' + Math.round(numValue).toLocaleString(); }
                     } else if (value === null || value === undefined) { value = '-'; }
@@ -445,23 +469,44 @@ def index():
     """首頁"""
     return render_template_string(HTML_TEMPLATE)
 
-@app.route('/api/sales-ranking')
-def get_sales_ranking():
-    """API: 業務員銷售業績排行榜 (Top Sales 排行)"""
+@app.route('/api/customer-loyalty')
+def get_customer_loyalty():
+    """API: 客戶活躍度與忠誠度分析表 (使用 LEFT JOIN)"""
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        
+        query = """
+            SELECT
+                c."顧客名稱",
+                COUNT(s."傳票編號") AS "訂單筆數"
+            FROM "顧客清單" AS c
+            LEFT JOIN "販賣資料" AS s
+                ON c."顧客ID" = s."顧客ID"
+            GROUP BY c."顧客ID", c."顧客名稱"
+            ORDER BY "訂單筆數" DESC;
+        """
+        cur.execute(query)
+        results = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": f"客戶活躍與忠誠度數據抓取失敗：{str(e)}"}), 500
+
+@app.route('/api/sales-ranking')
+def get_sales_ranking():
+    """API: 業務員銷售業績排行榜"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
         query = """
             SELECT
                 e."負責人姓名",
                 COUNT(*) AS "訂單筆數",
                 SUM(p."販賣單價" * s."數量") AS "銷售總額"
             FROM "販賣資料" AS s
-            INNER JOIN "負責人清單" AS e
-                ON s."負責人ID" = e."負責人ID"
-            INNER JOIN "商品清單" AS p
-                ON s."商品ID" = p."商品ID"
+            INNER JOIN "負責人清單" AS e ON s."負責人ID" = e."負責人ID"
+            INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
             GROUP BY e."負責人ID", e."負責人姓名"
             ORDER BY "銷售總額" DESC;
         """
@@ -523,8 +568,8 @@ def get_sales_by_group():
 @app.route('/api/sales-by-date')
 def get_sales_by_date():
     """API: 根據日期區間撈取報表"""
-    start_date = request.args.get('start', '2021-05-01')
-    end_date = request.args.get('end', '2021-05-31')
+    start_date = request.args.get('start', '2021-04-01')
+    end_date = request.args.get('end', '2021-06-30')
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -546,7 +591,7 @@ def get_sales_by_date():
 
 @app.route('/api/dashboard-stats')
 def get_dashboard_stats():
-    """API: 綜合計算儀表板核心指標"""
+    """API: 綜合計算儀表板核心指標與首頁三大圖表數據"""
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -612,14 +657,26 @@ def get_customer_stats():
 
 @app.route('/api/sales')
 def get_sales():
-    """API: 取得銷售流水帳"""
+    """API: 取得銷售流水帳 (四表 Join 完整總覽)"""
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         query = """
-            SELECT s."傳票編號", s."列編號" AS "列編號", s."處理日", p."商品名稱", p."販賣單價", s."數量", (p."販賣單價" * s."數量") AS "總金額", e."負責人姓名" AS "經辦員工", c."顧客名稱" AS "客戶名稱"
-            FROM "販賣資料" s LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID" LEFT JOIN "負責人清單" e ON s."負責人ID" = e."負責人ID" LEFT JOIN "顧客清單" c ON s."顧客ID" = c."顧客ID"
-            ORDER BY s."處理日" DESC, s."傳票編號" ASC;
+            SELECT 
+                s."傳票編號", 
+                s."列編號", 
+                s."處理日", 
+                p."商品名稱", 
+                p."販賣單價", 
+                s."數量", 
+                (p."販賣單價" * s."數量") AS "流水小計", 
+                e."負責人姓名", 
+                c."顧客名稱"
+            FROM "販賣資料" AS s
+            INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
+            INNER JOIN "負責人清單" AS e ON s."負責人ID" = e."負責人ID"
+            INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID"
+            ORDER BY s."傳票編號" ASC, s."列編號" ASC;
         """
         cur.execute(query)
         results = cur.fetchall()
