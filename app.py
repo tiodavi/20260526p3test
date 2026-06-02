@@ -35,7 +35,7 @@ HTML_TEMPLATE = """
         .kpi-card { border-left: 5px solid #0d6efd; }
         .kpi-title { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; color: #6c757d; }
         .kpi-value { font-size: 1.6rem; font-weight: 700; color: #343a40; }
-        .chart-container { position: relative; height: 300px; width: 100%; display: flex; justify-content: center; align-items: center; }
+        .chart-container { position: relative; height: 280px; width: 100%; display: flex; justify-content: center; align-items: center; }
     </style>
 </head>
 <body>
@@ -99,8 +99,8 @@ HTML_TEMPLATE = """
                     </div>
                 </div>
 
-                <div id="dashboard-chart-block" class="row g-4 mb-4" style="display:none;">
-                    <div class="col-md-10 mx-auto">
+                <div id="dashboard-chart-block" class="row g-4 mb-4 d-none">
+                    <div class="col-md-6 mx-auto">
                         <div class="card p-4 bg-white text-center">
                             <h5 class="text-secondary mb-3">🍕 Top 5 商品毛利貢獻佔比 (圓餅圖)</h5>
                             <div class="chart-container">
@@ -135,7 +135,7 @@ HTML_TEMPLATE = """
 
     <script>
         let cachedStatsData = [];
-        let profitChartInstance = null; // 用來儲存 Chart.js 實例，避免重複渲染衝突
+        let profitChartInstance = null;
 
         document.addEventListener("DOMContentLoaded", function() {
             loadData('dashboard');
@@ -160,14 +160,15 @@ HTML_TEMPLATE = """
                 filterBlock.style.display = 'none';
             }
 
+            // 修改這裡的動態 class 切換
             if (type === 'dashboard') {
                 dashboardCards.style.display = 'flex';
-                chartBlock.style.display = 'row'; // 顯示圖表區
+                chartBlock.classList.remove('d-none');
                 tableTitle.style.display = 'block';
                 title.innerText = '🏠 營運儀表板';
             } else {
                 dashboardCards.style.display = 'none';
-                chartBlock.style.display = 'none'; // 隱藏圖表區
+                chartBlock.classList.add('d-none');
                 tableTitle.style.display = 'none';
             }
             
@@ -181,7 +182,6 @@ HTML_TEMPLATE = """
                             body.innerHTML = `<tr><td class="text-center py-4 text-danger" colspan="10">❌ 數據載入失敗: ${data.error}</td></tr>`;
                             return;
                         }
-                        // 渲染六大 KPI 卡片
                         document.getElementById('kpi-total-sales').innerText = '$' + Math.round(data.kpi.total_sales).toLocaleString();
                         document.getElementById('kpi-total-profit').innerText = '$' + Math.round(data.kpi.total_profit).toLocaleString();
                         document.getElementById('kpi-margin-rate').innerText = data.kpi.margin_rate + '%';
@@ -189,10 +189,7 @@ HTML_TEMPLATE = """
                         document.getElementById('kpi-avg-order').innerText = '$' + Math.round(data.kpi.avg_order_value).toLocaleString();
                         document.getElementById('kpi-total-customers').innerText = data.kpi.total_customers + ' 人';
                         
-                        // 渲染 Chart.js 圓餅圖
                         renderProfitPieChart(data.top_products);
-
-                        // 下方表格渲染高毛利排行
                         renderTable(data.top_products);
                     })
                     .catch(err => {
@@ -227,16 +224,13 @@ HTML_TEMPLATE = """
                 });
         }
 
-        // 🎨 新增：渲染 Chart.js 圓餅圖的函式
         function renderProfitPieChart(productsData) {
             const ctx = document.getElementById('profitPieChart').getContext('2d');
             
-            // 如果之前已經有建立過圖表，先將它銷毀以避免重疊錯誤
             if (profitChartInstance) {
                 profitChartInstance.destroy();
             }
 
-            // 準備圖表所需的標籤(商品名稱)與數據(總創造毛利)
             const labels = productsData.map(item => item['商品名稱']);
             const profits = productsData.map(item => item['總創造毛利']);
 
@@ -258,12 +252,11 @@ HTML_TEMPLATE = """
                     maintainAspectRatio: false,
                     plugins: {
                         legend: {
-                            position: 'right', // 標籤放在右邊比較好閱讀
+                            position: 'right',
                             labels: { font: { size: 14 } }
                         },
                         tooltip: {
                             callbacks: {
-                                // 讓滑鼠移過去時，提示文字也能呈現漂亮的千分位錢字號
                                 label: function(context) {
                                     let value = context.raw || 0;
                                     return ' ' + context.label + ': $' + Math.round(value).toLocaleString();
