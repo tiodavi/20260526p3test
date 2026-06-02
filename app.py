@@ -47,6 +47,7 @@ HTML_TEMPLATE = """
                 </div>
                 <div class="mt-3">
                     <a href="#dashboard" id="menu-dashboard" onclick="loadData('dashboard')">🏠 營運儀表板</a>
+                    <a href="#sales-detail" id="menu-sales-detail" onclick="loadData('sales-detail')">📜 完整販賣明細</a>
                     <a href="#sales" id="menu-sales" onclick="loadData('sales')">📊 銷售流水帳</a>
                     <a href="#customer-stats" id="menu-customer-stats" onclick="loadData('customer-stats')">📈 顧客消費統計</a>
                     <a href="#products" id="menu-products" onclick="loadData('products')">💻 商品母體資料</a>
@@ -160,7 +161,6 @@ HTML_TEMPLATE = """
                 filterBlock.style.display = 'none';
             }
 
-            // 修改這裡的動態 class 切換
             if (type === 'dashboard') {
                 dashboardCards.style.display = 'flex';
                 chartBlock.classList.remove('d-none');
@@ -213,6 +213,7 @@ HTML_TEMPLATE = """
 
                     renderTable(data);
 
+                    if (type === 'sales-detail') title.innerText = '📜 完整販賣明細總覽 (四表 INNER JOIN)';
                     if (type === 'sales') title.innerText = '📊 銷售流水帳 (關聯查詢)';
                     if (type === 'customer-stats') title.innerText = '📈 顧客消費統計分析';
                     if (type === 'products') title.innerText = '💻 商品母體資料';
@@ -290,7 +291,7 @@ HTML_TEMPLATE = """
                     let value = row[key];
                     
                     if (value !== null && value !== undefined && 
-                        (key.includes('單價') || key.includes('金額') || key.includes('平均') || key.includes('銷售額') || key.includes('毛利'))) {
+                        (key.includes('單價') || key.includes('金額') || key.includes('平均') || key.includes('銷售額') || key.includes('毛利') || key.includes('小計') || key.includes('販賣單價'))) {
                         
                         if (key.includes('率')) {
                             value = parseFloat(value).toFixed(1) + '%';
@@ -349,6 +350,39 @@ def index():
     """首頁"""
     return render_template_string(HTML_TEMPLATE)
 
+@app.route('/api/sales-detail')
+def get_sales_detail():
+    """API: 取得完整販賣明細總覽 (對應圖片中的四表 INNER JOIN)"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # 100% 對應圖片中的 SQL 欄位邏輯與命名
+        query = """
+            SELECT 
+                s."傳票編號",
+                s."分錄編號" AS "列編號",
+                s."處理日期" AS "處理日",
+                p."商品名稱",
+                p."銷售單價" AS "販賣單價",
+                s."數量",
+                (p."銷售單價" * s."數量") AS "小計",
+                e."負責人姓名",
+                c."顧客名稱"
+            FROM "銷售資料" AS s
+            INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
+            INNER JOIN "負責人清單" AS e ON s."負責人ID" = e."負責人ID"
+            INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID"
+            ORDER BY s."傳票編號" ASC, s."分錄編號" ASC;
+        """
+        cur.execute(query)
+        results = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": f"四表聯查明細讀取失敗，錯誤訊息：{str(e)}"}), 500
+
 @app.route('/api/dashboard-stats')
 def get_dashboard_stats():
     """API: 取得儀表板 KPI (含浮點數毛利優化) 與商品利潤排行"""
@@ -356,7 +390,6 @@ def get_dashboard_stats():
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        # 1. 查詢 KPI 核心指標 (已修正 PostgreSQL 整數除法漏洞)
         kpi_query = """
             SELECT 
                 COALESCE(SUM(p."銷售單價" * s."數量"), 0) AS total_sales,
@@ -379,7 +412,6 @@ def get_dashboard_stats():
         cur.execute(kpi_query)
         kpi_result = cur.fetchone()
 
-        # 2. 查詢 Top 5 高毛利商品排行 (數據直接共用給圓餅圖與下方表格)
         top_products_query = """
             SELECT 
                 p."商品名稱",
