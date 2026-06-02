@@ -18,7 +18,7 @@ def get_db_connection():
     conn = psycopg2.connect(DATABASE_URL, sslmode='require')
     return conn
 
-# --- 前端 HTML 範本 (整合 CRM 與 業務考核 雙模組 + 組合商品交叉分析) ---
+# --- 前端 HTML 範本 (整合 產品線營運、CRM 與 業務考核 多功能版) ---
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="zh-TW">
@@ -203,7 +203,6 @@ HTML_TEMPLATE = """
                     </select>
                 </div>
 
-                <!-- 🚀 組合商品交叉分析專用動態變數篩選器 -->
                 <div id="filter-block-cross" class="filter-container align-items-center gap-3" style="display: none;">
                     <label for="target-product-select" class="form-label m-0 fw-bold text-secondary">🔮 選擇基準分析商品：</label>
                     <select id="target-product-select" class="form-select" style="max-width: 350px;" onchange="fetchCrossSellingAnalysis()">
@@ -259,7 +258,6 @@ HTML_TEMPLATE = """
             const activeMenu = document.getElementById(`menu-${type}`);
             if (activeMenu) activeMenu.classList.add('active');
             
-            // 控管篩選器 UI 顯示
             filterBlockSales.style.display = (type === 'sales-detail-check' || type === 'customer-preference') ? 'flex' : 'none';
             if (type === 'sales-detail-check' || type === 'customer-preference') {
                 currentActiveModule = type;
@@ -274,16 +272,14 @@ HTML_TEMPLATE = """
 
             filterBlockDate.style.display = (type === 'sales-by-date') ? 'flex' : 'none';
             
-            // 控制交叉組合分析篩選器
             filterBlockCross.style.display = (type === 'cross-selling') ? 'flex' : 'none';
             if (type === 'cross-selling') initTargetProductDropdown();
 
             salesBonusPanel.style.display = (type === 'sales-detail-check') ? 'flex' : 'none';
 
-            // 控制 CRM 精準行銷提示區內容
             if (type === 'sleeping-members') {
                 marketingTipBox.style.display = 'block';
-                marketingTipText.innerText = '以下會員已完成系統註冊，但從未產生 any 一筆消費交易。建議立即下載此名單，批量發送「首購 100 元折價券」或「迎新精美好禮簡訊」，刺激首購開張！';
+                marketingTipText.innerText = '以下會員已完成系統註冊，但從未產生任何一筆消費交易。建議立即下載此名單，批量發送「首購 100 元折價券」或「迎新精美好禮簡訊」，刺激首購開張！';
             } else if (type === 'customer-footprint') {
                 marketingTipBox.style.display = 'block';
                 marketingTipText.innerText = '此表結合了所有客戶與其歷史訂單，您可以一目了然看清「死忠大戶（有多筆訂單者）」與「新進客戶（僅一兩筆訂單者）」的分布型態，便於進行分群標籤。';
@@ -342,7 +338,6 @@ HTML_TEMPLATE = """
             if (type === 'sales-by-date') { fetchSalesByDate(); return; }
             if (type === 'cross-selling') { fetchCrossSellingAnalysis(); return; }
 
-            // CRM 模組 API 調用
             if (type === 'customer-footprint') {
                 fetch('/api/customer-footprint').then(res => res.json()).then(data => {
                     title.innerText = '👣 客戶歷史消費足跡總覽 (大戶與新客分布)';
@@ -359,7 +354,6 @@ HTML_TEMPLATE = """
                 return;
             }
 
-            // 其餘營運數據功能
             if (type === 'customer-ranking') {
                 fetch('/api/customer-ranking').then(res => res.json()).then(data => {
                     title.innerText = '🏆 顧客貢獻度排行榜 (VVIP 總覽)';
@@ -419,7 +413,6 @@ HTML_TEMPLATE = """
                             const opt = document.createElement('option');
                             opt.value = p['商品id'];
                             opt.innerHTML = `📦 [ID: ${p['商品id']}] ${p['商品名稱']} (${p['群組名稱']})`;
-                            // 預設鎖定商品ID=2 (筆記型電腦)
                             if (p['商品id'].toString() === '2') opt.selected = true;
                             select.appendChild(opt);
                         });
@@ -543,13 +536,13 @@ HTML_TEMPLATE = """
             const body = document.getElementById('table-body');
             const head = document.getElementById('table-head');
 
-            title.innerText = (groupName === 'ALL') ? '💻 商品群組銷貨 - 全總覽' : `💻 商品群組銷貨 - ${groupName}`;
-            body.innerHTML = '<tr><td class="text-center py-4" colspan="10"><div class="spinner-border spinner-border-sm text-primary me-2"></div>查詢中...</td></tr>';
+            title.innerText = (groupName === 'ALL') ? '💻 產品線營運表現 - 全品項總覽' : `📊 產品線營運表現分析 - [${groupName}]`;
+            body.innerHTML = '<tr><td class="text-center py-4" colspan="10"><div class="spinner-border spinner-border-sm text-primary me-2"></div>大數據產品線流水帳交叉查詢中...</td></tr>';
 
             fetch(`/api/sales-by-group?group_name=${encodeURIComponent(groupName)}`)
                 .then(res => res.json()).then(data => {
                     if (!data || data.error || data.length === 0) {
-                        head.innerHTML = ''; body.innerHTML = `<tr><td class="text-center py-4 text-muted" colspan="10">⚠️ 此群組尚無销售明細</td></tr>`;
+                        head.innerHTML = ''; body.innerHTML = `<tr><td class="text-center py-4 text-muted" colspan="10">⚠️ 此產品線分類尚無任何銷售明細</td></tr>`;
                         return;
                     }
                     renderTable(data);
@@ -639,7 +632,7 @@ HTML_TEMPLATE = """
                         if (key.includes('率')) { value = parseFloat(value).toFixed(1) + '%'; }
                         else { const numValue = parseFloat(value); if (!isNaN(numValue)) value = '$' + Math.round(numValue).toLocaleString(); }
                     } else if (value === null || value === undefined) { 
-                        if (key === '傳票編號' || key === '處理 Birch' || key === '處理日期' || key === '購買數量') {
+                        if (key === '傳票編號' || key === '處理日期' || key === '購買數量') {
                             value = '<span class="badge bg-secondary">無消費紀錄 (沉睡)</span>';
                         } else { value = '-'; }
                     }
@@ -683,7 +676,7 @@ def get_cross_selling_analysis():
         return jsonify({"error": "缺少基準商品 ID"}), 400
         
     try:
-        # 強制將傳入的 ID 轉為整數，避免型態比對失敗
+        # 強制在 Python 端將傳入的參數轉為整數型態，避免與資料庫 INT 格式衝突
         target_id_int = int(target_product_id)
     except ValueError:
         return jsonify({"error": "商品 ID 格式必須為數字"}), 400
@@ -691,7 +684,7 @@ def get_cross_selling_analysis():
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                # 精簡優化後的 SQL 語法：直接關聯，不容易受命名空間干擾
+                # 重新設計且精簡化的 SQL 語法：只做一次商品清單關聯，防止多重別名判定失誤
                 query = """
                     SELECT 
                         p."商品名稱",
@@ -702,12 +695,12 @@ def get_cross_selling_analysis():
                     FROM "販賣資料" AS s
                     INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
                     WHERE s."顧客ID" IN (
-                        -- 子查詢：抓出買過基準商品的所有顧客 ID
+                        -- 子查詢：揪出買過基準商品的所有顧客
                         SELECT DISTINCT "顧客ID"
                         FROM "販賣資料"
                         WHERE "商品ID" = %s
                     )
-                    AND s."商品ID" <> %s  -- 排除基準商品自己
+                    AND s."商品ID" <> %s  -- 排除基準商品自身
                     GROUP BY p."商品ID", p."商品名稱", p."群組名稱"
                     ORDER BY "累積購買總數量" DESC, "交叉貢獻總金額" DESC;
                 """
@@ -716,52 +709,45 @@ def get_cross_selling_analysis():
         return jsonify(results)
     except Exception as e:
         return jsonify({"error": f"交叉銷售分析失敗：{str(e)}"}), 500
-    """API: 輸入基準商品ID，找出買過該商品的客群，還買了哪些「其他商品」的排名累計"""
-    target_product_id = request.args.get('target_product_id')
-    if not target_product_id:
-        return jsonify({"error": "缺少基準商品 ID"}), 400
-        
+
+# --- 🚀 升級版：特定商品群組/產品線營運表現分析 API ---
+@app.route('/api/sales-by-group')
+def get_sales_by_group():
+    """API: 根據商品群組變數（如網路設備、手機），調閱其獨立流水帳，並聚焦大宗掃貨與營業表現"""
+    group_name = request.args.get('group_name', '電腦主機')
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                query = """
-                    WITH TargetCustomers AS (
-                        -- 1. 先找出買過該基準商品的所有不重複顧客 ID
-                        SELECT DISTINCT "顧客ID"
-                        FROM "販賣資料"
-                        WHERE "商品ID" = %s
-                    ),
-                    OtherPurchases AS (
-                        -- 2. 抓出這群客戶買過的所有「其他商品」紀錄
-                        SELECT 
-                            s."顧客ID",
-                            s."傳票編號",
-                            p."商品ID",
-                            p."商品名稱",
-                            p."群組名稱",
-                            s."數量"
-                        FROM "販賣資料" AS s
-                        INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
-                        WHERE s."顧客ID" IN (SELECT "顧客ID" FROM TargetCustomers)
-                          AND s."商品ID" <> %s  -- 排除掉基準商品本身
-                    )
-                    -- 3. 統計這些群組商品的累積數量與銷售總額，做熱門排行
+                # 升級核心查詢：加入單價、小計與經手人，利於主管進行營運評估
+                base_query = """
                     SELECT 
-                        "商品名稱",
-                        "群組名稱",
-                        COUNT(DISTINCT "顧客ID") AS "購買客戶數",
-                        SUM("數量") AS "累積購買總數量",
-                        SUM("數量" * "販賣單價") AS "交叉貢獻總金額"
-                    FROM OtherPurchases s
-                    INNER JOIN "商品清單" p ON s."商品ID" = p."商品ID"
-                    GROUP BY p."商品ID", "商品名稱", "群組名稱"
-                    ORDER BY "累積購買總數量" DESC, "交叉貢獻總金額" DESC;
+                        s."傳票編號",
+                        s."處理日" AS "處理日期",
+                        p."群組名稱",
+                        p."商品名稱",
+                        p."販賣單價",
+                        s."數量" AS "購買數量",
+                        (p."販賣單價" * s."數量") AS "銷售小計金額",
+                        c."顧客名稱",
+                        e."負責人姓名" AS "經手業務"
+                    FROM "販賣資料" AS s
+                    INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
+                    INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID"
+                    INNER JOIN "負責人清單" AS e ON s."負責人ID" = e."負責人ID"
                 """
-                cur.execute(query, (target_product_id, target_product_id))
+                
+                if group_name == 'ALL':
+                    # 預設依據購買數量由大到小排序，讓大宗出貨直接置頂
+                    query = base_query + ' ORDER BY s."數量" DESC, s."處理日" DESC;'
+                    cur.execute(query)
+                else:
+                    query = base_query + ' WHERE p."群組名稱" = %s ORDER BY s."數量" DESC, s."處理日" DESC;'
+                    cur.execute(query, (group_name,))
+                    
                 results = cur.fetchall()
         return jsonify(results)
     except Exception as e:
-        return jsonify({"error": f"交叉銷售分析失敗：{str(e)}"}), 500
+        return jsonify({"error": f"商品群組/產品線銷貨表現分析失敗：{str(e)}"}), 500
 
 # --- 🚀 既有業務績效考核模組後端 API 路由 ---
 @app.route('/api/sales-detail-by-staff')
@@ -942,23 +928,6 @@ def get_customer_ranking():
         return jsonify(results)
     except Exception as e:
         return jsonify({"error": f"顧客貢獻排行失敗：{str(e)}"}), 500
-
-@app.route('/api/sales-by-group')
-def get_sales_by_group():
-    group_name = request.args.get('group_name', '電腦主機')
-    try:
-        with get_db_connection() as conn:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                if group_name == 'ALL':
-                    query = 'SELECT s."傳票編號", s."處理日", p."商品名稱", p."群組名稱", c."顧客名稱", s."數量" FROM "販賣資料" AS s INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID" INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID" ORDER BY s."處理日" ASC;'
-                    cur.execute(query)
-                else:
-                    query = 'SELECT s."傳票編號", s."處理日", p."商品名稱", p."群組名稱", c."顧客名稱", s."數量" FROM "販賣資料" AS s INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID" INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID" WHERE p."群組名稱" = %s ORDER BY s."處理日" ASC;'
-                    cur.execute(query, (group_name,))
-                results = cur.fetchall()
-        return jsonify(results)
-    except Exception as e:
-        return jsonify({"error": f"商品群組查詢失敗：{str(e)}"}), 500
 
 @app.route('/api/sales-by-date')
 def get_sales_by_date():
