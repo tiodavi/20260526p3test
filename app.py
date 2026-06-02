@@ -1,5 +1,5 @@
 import os
-from flask import Flask, jsonify, render_template_string
+from flask import Flask, jsonify, render_template_string, request
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
@@ -47,7 +47,7 @@ HTML_TEMPLATE = """
                 </div>
                 <div class="mt-3">
                     <a href="#dashboard" id="menu-dashboard" onclick="loadData('dashboard')">🏠 營運儀表板</a>
-                    <a href="#sales-detail" id="menu-sales-detail" onclick="loadData('sales-detail')">📜 完整販賣明細</a>
+                    <a href="#sales-by-customer" id="menu-sales-by-customer" onclick="loadData('sales-by-customer')">🏢 顧客消費明細</a>
                     <a href="#sales" id="menu-sales" onclick="loadData('sales')">📊 銷售流水帳</a>
                     <a href="#customer-stats" id="menu-customer-stats" onclick="loadData('customer-stats')">📈 顧客消費統計</a>
                     <a href="#products" id="menu-products" onclick="loadData('products')">💻 商品母體資料</a>
@@ -111,6 +111,12 @@ HTML_TEMPLATE = """
                     </div>
                 </div>
 
+                <div id="filter-block-customer" class="filter-container align-items-center gap-3" style="display: none;">
+                    <label for="customer-name-select" class="form-label m-0 fw-bold text-secondary">🔍 選擇指定顧客：</label>
+                    <select id="customer-name-select" class="form-select" style="max-width: 300px;" onchange="fetchSalesByCustomer()">
+                        </select>
+                </div>
+
                 <div id="filter-block" class="filter-container align-items-center gap-3">
                     <label for="customer-select" class="form-label m-0 fw-bold text-secondary">🔍 篩選特定顧客：</label>
                     <select id="customer-select" class="form-select" style="max-width: 300px;" onchange="filterCustomerStats()">
@@ -148,17 +154,26 @@ HTML_TEMPLATE = """
             const title = document.getElementById('page-title');
             const tableTitle = document.getElementById('table-title');
             const filterBlock = document.getElementById('filter-block');
+            const filterBlockCustomer = document.getElementById('filter-block-customer');
             const dashboardCards = document.getElementById('dashboard-cards');
             const chartBlock = document.getElementById('dashboard-chart-block');
             
             document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active'));
             document.getElementById(`menu-${type}`).classList.add('active');
             
+            // 控制各頁面專屬篩選欄位的顯示與隱藏
             if (type === 'customer-stats') {
                 filterBlock.style.display = 'flex';
                 initCustomerDropdown();
             } else {
                 filterBlock.style.display = 'none';
+            }
+
+            if (type === 'sales-by-customer') {
+                filterBlockCustomer.style.display = 'flex';
+                initCustomerNameDropdown(); // 初始化顧客選單
+            } else {
+                filterBlockCustomer.style.display = 'none';
             }
 
             if (type === 'dashboard') {
@@ -198,6 +213,12 @@ HTML_TEMPLATE = """
                 return;
             }
 
+            // 新增自訂顧客查詢頁面的獨立處理邏輯
+            if (type === 'sales-by-customer') {
+                fetchSalesByCustomer();
+                return;
+            }
+
             fetch(`/api/${type}`)
                 .then(res => res.json())
                 .then(data => {
@@ -213,11 +234,60 @@ HTML_TEMPLATE = """
 
                     renderTable(data);
 
-                    if (type === 'sales-detail') title.innerText = '📜 完整販賣明細總覽 (四表 INNER JOIN)';
                     if (type === 'sales') title.innerText = '📊 銷售流水帳 (關聯查詢)';
                     if (type === 'customer-stats') title.innerText = '📈 顧客消費統計分析';
                     if (type === 'products') title.innerText = '💻 商品母體資料';
                     if (type === 'customers') title.innerText = '👥 顧客客戶清單';
+                })
+                .catch(err => {
+                    head.innerHTML = '';
+                    body.innerHTML = `<tr><td class="text-center py-4 text-danger" colspan="10">❌ 遠端連線異常: ${err}</td></tr>`;
+                });
+        }
+
+        // 初始化「顧客消費明細」專用的顧客選單（預設選中發財資訊公司）
+        function initCustomerNameDropdown() {
+            const select = document.getElementById('customer-name-select');
+            if (select.options.length > 0) return; // 避免重複加載
+
+            fetch('/api/customers')
+                .then(res => res.json())
+                .then(customers => {
+                    if (customers && !customers.error) {
+                        customers.forEach(c => {
+                            const opt = document.createElement('option');
+                            opt.value = c['顧客名稱'];
+                            opt.innerHTML = c['顧客名稱'];
+                            if (c['顧客名稱'] === '發財資訊公司') {
+                                opt.selected = true; // 預設勾選
+                            }
+                            select.appendChild(opt);
+                        });
+                    }
+                });
+        }
+
+        // 當下拉選單變更時，觸發此函式向後端要特定顧客的明細
+        function fetchSalesByCustomer() {
+            const select = document.getElementById('customer-name-select');
+            // 首次進入時若下拉選單還沒建好，預設帶入 '發財資訊公司'
+            const customerName = select.value || '發財資訊公司'; 
+            const title = document.getElementById('page-title');
+            const body = document.getElementById('table-body');
+            const head = document.getElementById('table-head');
+
+            title.innerText = `🏢 顧客消費明細 - ${customerName}`;
+            body.innerHTML = '<tr><td class="text-center py-4" colspan="10"><div class="spinner-border spinner-border-sm text-primary me-2"></div>查詢中，請稍候...</td></tr>';
+
+            fetch(`/api/sales-by-customer?customer_name=${encodeURIComponent(customerName)}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (!data || data.error || data.length === 0) {
+                        head.innerHTML = '';
+                        body.innerHTML = `<tr><td class="text-center py-4 text-muted" colspan="10">⚠️ ${data.error || '該顧客目前無任何消費明細'}</td></tr>`;
+                        return;
+                    }
+                    renderTable(data);
                 })
                 .catch(err => {
                     head.innerHTML = '';
@@ -350,42 +420,44 @@ def index():
     """首頁"""
     return render_template_string(HTML_TEMPLATE)
 
-@app.route('/api/sales-detail')
-def get_sales_detail():
-    """API: 取得完整販賣明細總覽 (對應圖片中的四表 INNER JOIN)"""
+@app.route('/api/sales-by-customer')
+def get_sales_by_customer():
+    """API: 根據顧客名稱動態查詢消費明細 (100% 採用使用者提供的 SQL 結構)"""
+    # 獲取前端傳來的顧客名稱參數，若未傳入則預設為 '發財資訊公司'
+    customer_name = request.args.get('customer_name', '發財資訊公司')
+    
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        # 100% 對應圖片中的 SQL 欄位邏輯與命名
+        # 完全採用您提供的 SQL 語法，僅將 hardcode 的名稱改為動態變數 %s
         query = """
-            SELECT 
+            SELECT
                 s."傳票編號",
-                s."分錄編號" AS "列編號",
                 s."處理日期" AS "處理日",
                 p."商品名稱",
                 p."銷售單價" AS "販賣單價",
                 s."數量",
-                (p."銷售單價" * s."數量") AS "小計",
-                e."負責人姓名",
-                c."顧客名稱"
+                (p."銷售單價" * s."數量") AS "小計"
             FROM "銷售資料" AS s
-            INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
-            INNER JOIN "負責人清單" AS e ON s."負責人ID" = e."負責人ID"
-            INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID"
-            ORDER BY s."傳票編號" ASC, s."分錄編號" ASC;
+            INNER JOIN "商品清單" AS p
+                ON s."商品ID" = p."商品ID"
+            INNER JOIN "顧客清單" AS c
+                ON s."顧客ID" = c."顧客ID"
+            WHERE c."顧客名稱" = %s
+            ORDER BY s."傳票編號" ASC;
         """
-        cur.execute(query)
+        cur.execute(query, (customer_name,))
         results = cur.fetchall()
         cur.close()
         conn.close()
         return jsonify(results)
     except Exception as e:
-        return jsonify({"error": f"四表聯查明細讀取失敗，錯誤訊息：{str(e)}"}), 500
+        return jsonify({"error": f"顧客明細查詢失敗，錯誤訊息：{str(e)}"}), 500
 
 @app.route('/api/dashboard-stats')
 def get_dashboard_stats():
-    """API: 取得儀表板 KPI (含浮點數毛利優化) 與商品利潤排行"""
+    """API: 取得儀表板 KPI 與商品利潤排行"""
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
