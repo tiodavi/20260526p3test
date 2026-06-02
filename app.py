@@ -49,7 +49,6 @@ HTML_TEMPLATE = """
                     <a href="#dashboard" id="menu-dashboard" onclick="loadData('dashboard')">🏠 營運儀表板</a>
                     <a href="#sales-by-date" id="menu-sales-by-date" onclick="loadData('sales-by-date')">📅 區間銷售流水</a>
                     <a href="#sales-by-group" id="menu-sales-by-group" onclick="loadData('sales-by-group')">💻 商品群組銷貨</a>
-                    <a href="#sales-by-customer" id="menu-sales-by-customer" onclick="loadData('sales-by-customer')">🏢 顧客消費明細</a>
                     <a href="#sales" id="menu-sales" onclick="loadData('sales')">📊 銷售流水帳</a>
                     <a href="#customer-stats" id="menu-customer-stats" onclick="loadData('customer-stats')">📈 顧客消費統計</a>
                     <a href="#products" id="menu-products" onclick="loadData('products')">🖥️ 商品母體資料</a>
@@ -118,7 +117,7 @@ HTML_TEMPLATE = """
                     <input type="date" id="start-date" class="form-control" style="max-width: 200px;" value="2021-05-01">
                     <label for="end-date" class="form-label m-0 fw-bold text-secondary">📅 結束日期：</label>
                     <input type="date" id="end-date" class="form-control" style="max-width: 200px;" value="2021-05-31">
-                    <button class="btn btn-primary fw-bold" onclick="fetchSalesByDate()">🔍 篩選區塊明細</button>
+                    <button class="btn btn-primary fw-bold" onclick="fetchSalesByDate()">🔍 篩選區間明細</button>
                 </div>
 
                 <div id="filter-block-group" class="filter-container align-items-center gap-3" style="display: none;">
@@ -127,13 +126,7 @@ HTML_TEMPLATE = """
                         </select>
                 </div>
 
-                <div id="filter-block-customer" class="filter-container align-items-center gap-3" style="display: none;">
-                    <label for="customer-name-select" class="form-label m-0 fw-bold text-secondary">🔍 選擇指定顧客：</label>
-                    <select id="customer-name-select" class="form-select" style="max-width: 300px;" onchange="fetchSalesByCustomer()">
-                        </select>
-                </div>
-
-                <div id="filter-block" class="filter-container align-items-center gap-3">
+                <div id="filter-block" class="filter-container align-items-center gap-3" style="display: none;">
                     <label for="customer-select" class="form-label m-0 fw-bold text-secondary">🔍 篩選特定顧客：</label>
                     <select id="customer-select" class="form-select" style="max-width: 300px;" onchange="filterCustomerStats()">
                         <option value="ALL">-- 顯示所有顧客 --</option>
@@ -170,7 +163,6 @@ HTML_TEMPLATE = """
             const title = document.getElementById('page-title');
             const tableTitle = document.getElementById('table-title');
             const filterBlock = document.getElementById('filter-block');
-            const filterBlockCustomer = document.getElementById('filter-block-customer');
             const filterBlockGroup = document.getElementById('filter-block-group');
             const filterBlockDate = document.getElementById('filter-block-date');
             const dashboardCards = document.getElementById('dashboard-cards');
@@ -179,12 +171,9 @@ HTML_TEMPLATE = """
             document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active'));
             document.getElementById(`menu-${type}`).classList.add('active');
             
-            // 集中管控篩選欄位切換
+            // 控管篩選區塊顯示
             filterBlock.style.display = (type === 'customer-stats') ? 'flex' : 'none';
             if (type === 'customer-stats') initCustomerDropdown();
-
-            filterBlockCustomer.style.display = (type === 'sales-by-customer') ? 'flex' : 'none';
-            if (type === 'sales-by-customer') initCustomerNameDropdown();
 
             filterBlockGroup.style.display = (type === 'sales-by-group') ? 'flex' : 'none';
             if (type === 'sales-by-group') initGroupNameDropdown();
@@ -228,7 +217,6 @@ HTML_TEMPLATE = """
                 return;
             }
 
-            if (type === 'sales-by-customer') { fetchSalesByCustomer(); return; }
             if (type === 'sales-by-group') { fetchSalesByGroup(); return; }
             if (type === 'sales-by-date') { fetchSalesByDate(); return; }
 
@@ -246,7 +234,7 @@ HTML_TEMPLATE = """
 
                     if (type === 'sales') title.innerText = '📊 銷售流水帳 (關聯查詢)';
                     if (type === 'customer-stats') title.innerText = '📈 顧客消費統計分析';
-                    if (type === 'products') title.innerText = '🖥️ 商品母體資料';
+                    if (type === 'products') title.innerText = '💻 商品母體資料';
                     if (type === 'customers') title.innerText = '👥 顧客客戶清單';
                 })
                 .catch(err => {
@@ -255,39 +243,12 @@ HTML_TEMPLATE = """
                 });
         }
 
-        // 新增功能：向後端動態拉取指定日期區間內的銷貨報表
-        function fetchSalesByDate() {
-            const startDate = document.getElementById('start-date').value;
-            const endDate = document.getElementById('end-date').value;
-            const title = document.getElementById('page-title');
-            const body = document.getElementById('table-body');
-            const head = document.getElementById('table-head');
-
-            title.innerText = `📅 區間銷售流水 [${startDate} ~ ${endDate}]`;
-            body.innerHTML = '<tr><td class="text-center py-4" colspan="10"><div class="spinner-border spinner-border-sm text-primary me-2"></div>讀取區間數據中...</td></tr>';
-
-            fetch(`/api/sales-by-date?start=${startDate}&end=${endDate}`)
-                .then(res => res.json())
-                .then(data => {
-                    if (!data || data.error || data.length === 0) {
-                        head.innerHTML = '';
-                        body.innerHTML = `<tr><td class="text-center py-4 text-muted" colspan="10">⚠️ 選擇的日期區間內沒有任何銷貨明細</td></tr>`;
-                        return;
-                    }
-                    renderTable(data);
-                })
-                .catch(err => {
-                    head.innerHTML = '';
-                    body.innerHTML = `<tr><td class="text-center py-4 text-danger" colspan="10">❌ 遠端連線異常: ${err}</td></tr>`;
-                });
-        }
-
+        // 呼叫群組下拉選單
         function initGroupNameDropdown() {
             const select = document.getElementById('group-name-select');
             if (select.options.length > 0) return;
             const allOpt = document.createElement('option');
-            allOpt.value = 'ALL';
-            allOpt.innerHTML = '-- 顯示所有商品群組 --';
+            allOpt.value = 'ALL'; allOpt.innerHTML = '-- 顯示所有商品群組 --';
             select.appendChild(allOpt);
 
             fetch('/api/products')
@@ -305,6 +266,7 @@ HTML_TEMPLATE = """
                 });
         }
 
+        // 撈取群組銷貨資料
         function fetchSalesByGroup() {
             const select = document.getElementById('group-name-select');
             const groupName = select.value || '電腦主機';
@@ -312,53 +274,34 @@ HTML_TEMPLATE = """
             const body = document.getElementById('table-body');
             const head = document.getElementById('table-head');
 
-            title.innerText = (groupName === 'ALL') ? '💻 商品群組銷貨 - 全群組總覽' : `💻 商品群組銷貨 - ${groupName}`;
-            body.innerHTML = '<tr><td class="text-center py-4" colspan="10"><div class="spinner-border spinner-border-sm text-primary me-2"></div>查詢中，請稍候...</td></tr>';
+            title.innerText = (groupName === 'ALL') ? '💻 商品群組銷貨 - 全總覽' : `💻 商品群組銷貨 - ${groupName}`;
+            body.innerHTML = '<tr><td class="text-center py-4" colspan="10"><div class="spinner-border spinner-border-sm text-primary me-2"></div>查詢中...</td></tr>';
 
             fetch(`/api/sales-by-group?group_name=${encodeURIComponent(groupName)}`)
-                .then(res => res.json())
-                .then(data => {
+                .then(res => res.json()).then(data => {
                     if (!data || data.error || data.length === 0) {
-                        head.innerHTML = ''; body.innerHTML = `<tr><td class="text-center py-4 text-muted" colspan="10">⚠️ 目前此群組無銷售明細</td></tr>`;
+                        head.innerHTML = ''; body.innerHTML = `<tr><td class="text-center py-4 text-muted" colspan="10">⚠️ 此群組尚無销售明細</td></tr>`;
                         return;
                     }
                     renderTable(data);
                 });
         }
 
-        function initCustomerNameDropdown() {
-            const select = document.getElementById('customer-name-select');
-            if (select.options.length > 0) return; 
-            const allOpt = document.createElement('option');
-            allOpt.value = 'ALL'; allOpt.innerHTML = '-- 顯示所有顧客明細 --';
-            select.appendChild(allOpt);
-
-            fetch('/api/customers').then(res => res.json()).then(customers => {
-                if (customers && !customers.error) {
-                    customers.forEach(c => {
-                        const opt = document.createElement('option');
-                        opt.value = c['顧客名稱']; opt.innerHTML = c['顧客名稱'];
-                        if (c['顧客名稱'] === '發財資訊公司') opt.selected = true;
-                        select.appendChild(opt);
-                    });
-                }
-            });
-        }
-
-        function fetchSalesByCustomer() {
-            const select = document.getElementById('customer-name-select');
-            const customerName = select.value || '發財資訊公司'; 
+        // 撈取日期區間資料
+        function fetchSalesByDate() {
+            const startDate = document.getElementById('start-date').value;
+            const endDate = document.getElementById('end-date').value;
             const title = document.getElementById('page-title');
             const body = document.getElementById('table-body');
             const head = document.getElementById('table-head');
 
-            title.innerText = (customerName === 'ALL') ? '🏢 顧客消費明細 - 全體顧客總覽' : `🏢 顧客消費明細 - ${customerName}`;
-            body.innerHTML = '<tr><td class="text-center py-4" colspan="10"><div class="spinner-border spinner-border-sm text-primary me-2"></div>查詢中，請稍候...</td></tr>';
+            title.innerText = `📅 區間銷售流水 [${startDate} ~ ${endDate}]`;
+            body.innerHTML = '<tr><td class="text-center py-4" colspan="10"><div class="spinner-border spinner-border-sm text-primary me-2"></div>讀取區間數據中...</td></tr>';
 
-            fetch(`/api/sales-by-customer?customer_name=${encodeURIComponent(customerName)}`)
+            fetch(`/api/sales-by-date?start=${startDate}&end=${endDate}`)
                 .then(res => res.json()).then(data => {
                     if (!data || data.error || data.length === 0) {
-                        head.innerHTML = ''; body.innerHTML = `<tr><td class="text-center py-4 text-muted" colspan="10">⚠️ 目前無任何消費明細</td></tr>`;
+                        head.innerHTML = ''; body.innerHTML = `<tr><td class="text-center py-4 text-muted" colspan="10">⚠️ 此時間區間內無銷售資料</td></tr>`;
                         return;
                     }
                     renderTable(data);
@@ -374,7 +317,7 @@ HTML_TEMPLATE = """
                 type: 'pie',
                 data: {
                     labels: labels,
-                    datasets: [{ data: profits, backgroundColor: ['#0d6efd', '#6f42c1', '#fd7e14', '#198754', '#ffc107'] }]
+                    datasets: [{ data: profits, backgroundColor: ['#0d6efd', '#6f42c1', '#fd7e14', '#198754', '#ffc107'], hoverOffset: 15 }]
                 },
                 options: { responsive: true, maintainAspectRatio: false }
             });
@@ -400,7 +343,7 @@ HTML_TEMPLATE = """
                 keys.forEach(key => {
                     let value = row[key];
                     if (value !== null && value !== undefined && 
-                        (key.includes('單價') || key.includes('金額') || key.includes('平均') || key.includes('銷售額') || key.includes('毛利') || key.includes('小計') || key.includes('販賣單價'))) {
+                        (key.includes('單價') || key.includes('金額') || key.includes('平均') || key.includes('銷售額') || key.includes('毛利'))) {
                         if (key.includes('率')) { value = parseFloat(value).toFixed(1) + '%'; }
                         else { const numValue = parseFloat(value); if (!isNaN(numValue)) value = '$' + Math.round(numValue).toLocaleString(); }
                     } else if (value === null || value === undefined) { value = '-'; }
@@ -442,48 +385,9 @@ def index():
     """首頁"""
     return render_template_string(HTML_TEMPLATE)
 
-@app.route('/api/sales-by-date')
-def get_sales_by_date():
-    """API: 新增功能 - 根據前端動態 Date Picker 撈取日期區間報表"""
-    # 接收前端參數，若沒傳則完美套用您要求的 2021-05-01 到 2021-05-31
-    start_date = request.args.get('start', '2021-05-01')
-    end_date = request.args.get('end', '2021-05-31')
-    
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        
-        # 完完全全採用您提供的 SQL 欄位結構與 JOIN 邏輯
-        # 搭配安全性防護 (%s) 將 hardcode 日期改為動態接收
-        query = """
-            SELECT
-                s."傳票編號",
-                s."處理日期" AS "處理日",
-                p."商品名稱",
-                e."負責人姓名",
-                c."顧客名稱",
-                s."數量"
-            FROM "銷售資料" AS s
-            INNER JOIN "商品清單" AS p
-                ON s."商品ID" = p."商品ID"
-            INNER JOIN "負責人清單" AS e
-                ON s."負責人ID" = e."負責人ID"
-            INNER JOIN "顧客清單" AS c
-                ON s."顧客ID" = c."顧客ID"
-            WHERE s."處理日期" BETWEEN %s AND %s
-            ORDER BY s."處理日期" ASC;
-        """
-        cur.execute(query, (start_date, end_date))
-        results = cur.fetchall()
-        cur.close()
-        conn.close()
-        return jsonify(results)
-    except Exception as e:
-        return jsonify({"error": f"日期區間銷貨報表抓取失敗：{str(e)}"}), 500
-
 @app.route('/api/sales-by-group')
 def get_sales_by_group():
-    """API: 依據商品群組動態查詢銷售明細"""
+    """API: 依據商品群組查詢銷售明細"""
     group_name = request.args.get('group_name', '電腦主機')
     try:
         conn = get_db_connection()
@@ -514,42 +418,44 @@ def get_sales_by_group():
     except Exception as e:
         return jsonify({"error": f"商品群組明細查詢失敗：{str(e)}"}), 500
 
-@app.route('/api/sales-by-customer')
-def get_sales_by_customer():
-    """API: 根據顧客名稱動態查詢消費明細"""
-    customer_name = request.args.get('customer_name', '發財資訊公司')
+@app.route('/api/sales-by-date')
+def get_sales_by_date():
+    """API: 根據日期區間撈取報表"""
+    start_date = request.args.get('start', '2021-05-01')
+    end_date = request.args.get('end', '2021-05-31')
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        if customer_name == 'ALL':
-            query = """
-                SELECT s."傳票編號", s."處理日期" AS "處理日", p."商品名稱", p."銷售單價" AS "販賣單價", s."數量", (p."銷售單價" * s."數量") AS "小計", c."顧客名稱"
-                FROM "銷售資料" AS s INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID" INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID" ORDER BY s."傳票編號" ASC;
-            """
-            cur.execute(query)
-        else:
-            query = """
-                SELECT s."傳票編號", s."處理日期" AS "處理日", p."商品名稱", p."銷售單價" AS "販賣單價", s."數量", (p."銷售單價" * s."數量") AS "小計"
-                FROM "銷售資料" AS s INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID" INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID" WHERE c."顧客名稱" = %s ORDER BY s."傳票編號" ASC;
-            """
-            cur.execute(query, (customer_name,))
+        query = """
+            SELECT s."傳票編號", s."處理日期" AS "處理日", p."商品名稱", e."負責人姓名", c."顧客名稱", s."數量"
+            FROM "銷售資料" AS s
+            INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
+            INNER JOIN "負責人清單" AS e ON s."負責人ID" = e."負責人ID"
+            INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID"
+            WHERE s."處理日期" BETWEEN %s AND %s
+            ORDER BY s."處理日期" ASC;
+        """
+        cur.execute(query, (start_date, end_date))
         results = cur.fetchall()
         cur.close()
         conn.close()
         return jsonify(results)
     except Exception as e:
-        return jsonify({"error": f"顧客消費明細數據抓取錯誤：{str(e)}"}), 500
+        return jsonify({"error": f"日期區間銷售流水抓取失敗：{str(e)}"}), 500
 
 @app.route('/api/dashboard-stats')
 def get_dashboard_stats():
-    """API: 取得儀表板 KPI"""
+    """API: 取得儀表板 KPI 與商品利潤排行"""
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         kpi_query = """
-            SELECT COALESCE(SUM(p."銷售單價" * s."數量"), 0) AS total_sales, COALESCE(SUM((p."銷售單價" - p."進貨單價") * s."數量"), 0) AS total_profit,
+            SELECT 
+                COALESCE(SUM(p."銷售單價" * s."數量"), 0) AS total_sales,
+                COALESCE(SUM((p."銷售單價" - p."進貨單價") * s."數量"), 0) AS total_profit,
                 CASE WHEN SUM(p."銷售單價" * s."數量") > 0 THEN ROUND((SUM((p."銷售單價" - p."進貨單價") * s."數量") * 100.0 / SUM(p."銷售單價" * s."數量")), 1) ELSE 0 END AS margin_rate,
-                COALESCE(SUM(s."數量"), 0) AS total_qty, COUNT(DISTINCT s."顧客ID") AS total_customers,
+                COALESCE(SUM(s."數量"), 0) AS total_qty,
+                COUNT(DISTINCT s."顧客ID") AS total_customers,
                 CASE WHEN COUNT(DISTINCT s."傳票編號") > 0 THEN COALESCE(SUM(p."銷售單價" * s."數量"), 0) / COUNT(DISTINCT s."傳票編號") ELSE 0 END AS avg_order_value
             FROM "銷售資料" s LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID";
         """
@@ -567,7 +473,7 @@ def get_dashboard_stats():
         conn.close()
         return jsonify({"kpi": kpi_result, "top_products": top_products})
     except Exception as e:
-        return jsonify({"error": f"儀表板統計錯誤：{str(e)}"}), 500
+        return jsonify({"error": f"儀表板數據統計失敗，錯誤訊息：{str(e)}"}), 500
 
 @app.route('/api/customer-stats')
 def get_customer_stats():
@@ -585,7 +491,7 @@ def get_customer_stats():
         conn.close()
         return jsonify(results)
     except Exception as e:
-        return jsonify({"error": f"統計分析錯誤：{str(e)}"}), 500
+        return jsonify({"error": f"統計資料分析失敗，錯誤訊息：{str(e)}"}), 500
 
 @app.route('/api/sales')
 def get_sales():
@@ -604,7 +510,7 @@ def get_sales():
         conn.close()
         return jsonify(results)
     except Exception as e:
-        return jsonify({"error": f"流水帳查詢錯誤：{str(e)}"}), 500
+        return jsonify({"error": f"資料庫查詢失敗，錯誤訊息：{str(e)}"}), 500
 
 @app.route('/api/products')
 def get_products():
@@ -618,7 +524,7 @@ def get_products():
         conn.close()
         return jsonify(results)
     except Exception as e:
-        return jsonify({"error": f"商品資料讀取錯誤：{str(e)}"}), 500
+        return jsonify({"error": f"商品資料讀取失敗：{str(e)}"}), 500
 
 @app.route('/api/customers')
 def get_customers():
@@ -632,7 +538,7 @@ def get_customers():
         conn.close()
         return jsonify(results)
     except Exception as e:
-        return jsonify({"error": f"顧客資料讀取錯誤：{str(e)}"}), 500
+        return jsonify({"error": f"顧客資料讀取失敗：{str(e)}"}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
