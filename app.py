@@ -31,6 +31,9 @@ HTML_TEMPLATE = """
         .card { border: none; box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,0.075); border-radius: 10px; }
         .table th { font-weight: 600; background-color: #343a40 !important; color: white !important; }
         .filter-container { display: none; background: #e9ecef; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+        .kpi-card { border-left: 5px solid #0d6efd; }
+        .kpi-title { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; color: #6c757d; }
+        .kpi-value { font-size: 1.8rem; font-weight: 700; color: #343a40; }
     </style>
 </head>
 <body>
@@ -41,6 +44,7 @@ HTML_TEMPLATE = """
                     <h4 class="m-0">🏪 3C 零售系統</h4>
                 </div>
                 <div class="mt-3">
+                    <a href="#dashboard" id="menu-dashboard" onclick="loadData('dashboard')">🏠 營運儀表板</a>
                     <a href="#sales" id="menu-sales" onclick="loadData('sales')">📊 銷售流水帳</a>
                     <a href="#customer-stats" id="menu-customer-stats" onclick="loadData('customer-stats')">📈 顧客消費統計</a>
                     <a href="#products" id="menu-products" onclick="loadData('products')">💻 商品母體資料</a>
@@ -50,8 +54,35 @@ HTML_TEMPLATE = """
             
             <div class="col-md-10 p-4">
                 <div class="d-flex justify-content-between align-items-center mb-4">
-                    <h2 id="page-title" class="m-0">📊 銷售流水帳 (關聯查詢)</h2>
+                    <h2 id="page-title" class="m-0">🏠 營運儀表板</h2>
                     <span class="badge bg-success p-2">Neon 雲端連線正常</span>
+                </div>
+
+                <div id="dashboard-cards" class="row g-3 mb-4">
+                    <div class="col-md-3">
+                        <div class="card p-3 bg-white h-100 kpi-card" style="border-left-color: #0d6efd;">
+                            <div class="kpi-title">💰 累積總銷售額</div>
+                            <div class="kpi-value" id="kpi-total-sales">$0</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card p-3 bg-white h-100 kpi-card" style="border-left-color: #198754;">
+                            <div class="kpi-title">📦 總銷售商品數</div>
+                            <div class="kpi-value" id="kpi-total-qty">0 件</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card p-3 bg-white h-100 kpi-card" style="border-left-color: #ffc107;">
+                            <div class="kpi-title">🤝 平均客單價 (按訂單)</div>
+                            <div class="kpi-value" id="kpi-avg-order">$0</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card p-3 bg-white h-100 kpi-card" style="border-left-color: #dc3545;">
+                            <div class="kpi-title">🔥 活躍客戶數</div>
+                            <div class="kpi-value" id="kpi-total-customers">0 人</div>
+                        </div>
+                    </div>
                 </div>
 
                 <div id="filter-block" class="filter-container align-items-center gap-3">
@@ -62,10 +93,11 @@ HTML_TEMPLATE = """
                 </div>
 
                 <div class="card p-4 bg-white">
+                    <h5 id="table-title" class="mb-3 text-secondary" style="display:none;">🔥 Top 5 熱銷商品排行</h5>
                     <div class="table-responsive">
                         <table class="table table-striped table-hover align-middle m-0" id="data-table">
                             <thead id="table-head">
-                                </thead>
+                            </thead>
                             <tbody id="table-body">
                                 <tr><td class="text-center" colspan="10">系統初始化中...</td></tr>
                             </tbody>
@@ -80,27 +112,65 @@ HTML_TEMPLATE = """
         let cachedStatsData = [];
 
         document.addEventListener("DOMContentLoaded", function() {
-            loadData('sales');
+            // 預設載入儀表板
+            loadData('dashboard');
         });
 
         function loadData(type) {
             const body = document.getElementById('table-body');
             const head = document.getElementById('table-head');
             const title = document.getElementById('page-title');
+            const tableTitle = document.getElementById('table-title');
             const filterBlock = document.getElementById('filter-block');
+            const dashboardCards = document.getElementById('dashboard-cards');
             
             document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active'));
             document.getElementById(`menu-${type}`).classList.add('active');
             
+            // UI 控制隱藏與顯示
             if (type === 'customer-stats') {
                 filterBlock.style.display = 'flex';
                 initCustomerDropdown();
             } else {
                 filterBlock.style.display = 'none';
             }
+
+            if (type === 'dashboard') {
+                dashboardCards.style.display = 'flex';
+                tableTitle.style.display = 'block';
+                title.innerText = '🏠 營運儀表板';
+            } else {
+                dashboardCards.style.display = 'none';
+                tableTitle.style.display = 'none';
+            }
             
             body.innerHTML = '<tr><td class="text-center py-4" colspan="10"><div class="spinner-border spinner-border-sm text-primary me-2"></div>讀取資料中，請稍候...</td></tr>';
 
+            // 處理儀表板的特別請求
+            if (type === 'dashboard') {
+                fetch('/api/dashboard-stats')
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.error) {
+                            body.innerHTML = `<tr><td class="text-center py-4 text-danger" colspan="10">❌ 數據載入失敗: ${data.error}</td></tr>`;
+                            return;
+                        }
+                        // 渲染 KPI 卡片
+                        document.getElementById('kpi-total-sales').innerText = '$' + Math.round(data.kpi.total_sales).toLocaleString();
+                        document.getElementById('kpi-total-qty').innerText = Math.round(data.kpi.total_qty).toLocaleString() + ' 件';
+                        document.getElementById('kpi-avg-order').innerText = '$' + Math.round(data.kpi.avg_order_value).toLocaleString();
+                        document.getElementById('kpi-total-customers').innerText = data.kpi.total_customers + ' 人';
+                        
+                        // 下方表格渲染熱銷商品
+                        renderTable(data.top_products);
+                    })
+                    .catch(err => {
+                        body.innerHTML = `<tr><td class="text-center py-4 text-danger" colspan="10">❌ 遠端連線異常: ${err}</td></tr>`;
+                    });
+                return;
+            }
+
+            // 一般 API 請求
             fetch(`/api/${type}`)
                 .then(res => res.json())
                 .then(data => {
@@ -148,10 +218,8 @@ HTML_TEMPLATE = """
                 keys.forEach(key => {
                     let value = row[key];
                     
-                    // ⭐ 前端進階格式化：只要欄位名稱包含價格相關關鍵字，就進行優化處理
                     if (value !== null && value !== undefined && 
-                        (key.includes('單價') || key.includes('金額') || key.includes('平均'))) {
-                        // 轉換為浮點數並進行四捨五入，最後加上千分位與金錢符號
+                        (key.includes('單價') || key.includes('金額') || key.includes('平均') || key.includes('銷售額'))) {
                         const numValue = parseFloat(value);
                         if (!isNaN(numValue)) {
                             value = '$' + Math.round(numValue).toLocaleString();
@@ -205,14 +273,65 @@ def index():
     """首頁"""
     return render_template_string(HTML_TEMPLATE)
 
+@app.route('/api/dashboard-stats')
+def get_dashboard_stats():
+    """API: 取得儀表板 KPI 與熱銷排行數據"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # 1. 查詢 KPI 核心指標
+        # - 總銷售額：SUM(銷售單價 * 數量)
+        # - 總商品數量：SUM(數量)
+        # - 平均客單價：總銷售額 / 獨立傳票(訂單)數量
+        # - 活躍客戶數：不重複的顧客ID數量
+        kpi_query = """
+            SELECT 
+                COALESCE(SUM(p."銷售單價" * s."數量"), 0) AS total_sales,
+                COALESCE(SUM(s."數量"), 0) AS total_qty,
+                COUNT(DISTINCT s."顧客ID") AS total_customers,
+                CASE 
+                    WHEN COUNT(DISTINCT s."傳票編號") > 0 
+                    THEN COALESCE(SUM(p."銷售單價" * s."數量"), 0) / COUNT(DISTINCT s."傳票編號")
+                    ELSE 0 
+                END AS avg_order_value
+            FROM "銷售資料" s
+            LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID";
+        """
+        cur.execute(kpi_query)
+        kpi_result = cur.fetchone()
+
+        # 2. 查詢 Top 5 熱銷商品排行
+        top_products_query = """
+            SELECT 
+                p."商品名稱",
+                SUM(s."數量") AS "總銷售數量",
+                SUM(p."銷售單價" * s."數量") AS "總銷售額"
+            FROM "銷售資料" s
+            LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID"
+            GROUP BY p."商品名稱"
+            ORDER BY "總銷售額" DESC
+            LIMIT 5;
+        """
+        cur.execute(top_products_query)
+        top_products = cur.fetchall()
+        
+        cur.close()
+        conn.close()
+        
+        return jsonify({
+            "kpi": kpi_result,
+            "top_products": top_products
+        })
+    except Exception as e:
+        return jsonify({"error": f"儀表板數據統計失敗，錯誤訊息：{str(e)}"}), 500
+
 @app.route('/api/customer-stats')
 def get_customer_stats():
     """API: 取得顧客消費統計分析"""
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        
-        # ⭐ 關鍵修正：在 SQL 端直接使用 ROUND(..., 0) 將平均單價轉化為整數
         query = """
             SELECT 
                 s."顧客ID",
