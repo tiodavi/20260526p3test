@@ -35,7 +35,7 @@ HTML_TEMPLATE = """
         .kpi-card { border-left: 5px solid #0d6efd; }
         .kpi-title { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; color: #6c757d; }
         .kpi-value { font-size: 1.6rem; font-weight: 700; color: #343a40; }
-        .chart-container { position: relative; height: 280px; width: 100%; display: flex; justify-content: center; align-items: center; }
+        .chart-container { position: relative; height: 260px; width: 100%; display: flex; justify-content: center; align-items: center; }
     </style>
 </head>
 <body>
@@ -47,6 +47,7 @@ HTML_TEMPLATE = """
                 </div>
                 <div class="mt-3">
                     <a href="#dashboard" id="menu-dashboard" onclick="loadData('dashboard')">🏠 營運儀表板</a>
+                    <a href="#sales-ranking" id="menu-sales-ranking" onclick="loadData('sales-ranking')">🏅 業務業績排行</a>
                     <a href="#customer-ranking" id="menu-customer-ranking" onclick="loadData('customer-ranking')">🏆 顧客貢獻排行</a>
                     <a href="#sales-by-date" id="menu-sales-by-date" onclick="loadData('sales-by-date')">📅 區間銷售流水</a>
                     <a href="#sales-by-group" id="menu-sales-by-group" onclick="loadData('sales-by-group')">💻 商品群組銷貨</a>
@@ -102,20 +103,28 @@ HTML_TEMPLATE = """
                     </div>
                 </div>
 
-                <div id="dashboard-chart-block" class="row g-4 mb-4 d-none">
-                    <div class="col-md-6">
-                        <div class="card p-4 bg-white text-center h-100">
-                            <h5 class="text-secondary mb-3">🍕 Top 5 商品毛利貢獻佔比 (圓餅圖)</h5>
+                <div id="dashboard-chart-block" class="row g-3 mb-4 d-none">
+                    <div class="col-md-4">
+                        <div class="card p-3 bg-white text-center h-100">
+                            <h6 class="text-secondary mb-2">🍕 Top 5 商品毛利貢獻佔比</h6>
                             <div class="chart-container">
                                 <canvas id="profitPieChart"></canvas>
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-6">
-                        <div class="card p-4 bg-white text-center h-100">
-                            <h5 class="text-secondary mb-3">📊 Top 5 顧客消費總金額排行 (長條圖)</h5>
+                    <div class="col-md-4">
+                        <div class="card p-3 bg-white text-center h-100">
+                            <h6 class="text-secondary mb-2">🏢 Top 5 顧客消費金額排行</h6>
                             <div class="chart-container">
                                 <canvas id="customerBarChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card p-3 bg-white text-center h-100">
+                            <h6 class="text-secondary mb-2">🏅 業務員銷售總額 PK 排行</h6>
+                            <div class="chart-container">
+                                <canvas id="salesBarChart"></canvas>
                             </div>
                         </div>
                     </div>
@@ -162,6 +171,7 @@ HTML_TEMPLATE = """
         let cachedStatsData = [];
         let profitChartInstance = null;
         let customerChartInstance = null;
+        let salesChartInstance = null;
 
         document.addEventListener("DOMContentLoaded", function() {
             loadData('dashboard');
@@ -220,6 +230,7 @@ HTML_TEMPLATE = """
                         
                         renderProfitPieChart(data.top_products);
                         renderCustomerBarChart(data.top_customers);
+                        renderSalesBarChart(data.top_sales);
                         renderTable(data.top_products);
                     })
                     .catch(err => {
@@ -231,14 +242,21 @@ HTML_TEMPLATE = """
             if (type === 'sales-by-group') { fetchSalesByGroup(); return; }
             if (type === 'sales-by-date') { fetchSalesByDate(); return; }
 
-            // 新增：前端調用顧客排行榜 API
+            // 調用顧客排行榜 API
             if (type === 'customer-ranking') {
-                fetch('/api/customer-ranking')
-                    .then(res => res.json())
-                    .then(data => {
-                        title.innerText = '🏆 顧客貢獻度排行榜 (VVIP 總覽)';
-                        renderTable(data);
-                    });
+                fetch('/api/customer-ranking').then(res => res.json()).then(data => {
+                    title.innerText = '🏆 顧客貢獻度排行榜 (VVIP 總覽)';
+                    renderTable(data);
+                });
+                return;
+            }
+
+            // 新增：前端調用業務排行榜 API
+            if (type === 'sales-ranking') {
+                fetch('/api/sales-ranking').then(res => res.json()).then(data => {
+                    title.innerText = '🏅 業務員業績業績排行榜 (Top Sales)';
+                    renderTable(data);
+                });
                 return;
             }
 
@@ -336,13 +354,12 @@ HTML_TEMPLATE = """
                 type: 'pie',
                 data: {
                     labels: labels,
-                    datasets: [{ data: profits, backgroundColor: ['#0d6efd', '#6f42c1', '#fd7e14', '#198754', '#ffc107'], hoverOffset: 15 }]
+                    datasets: [{ data: profits, backgroundColor: ['#0d6efd', '#6f42c1', '#fd7e14', '#198754', '#ffc107'], hoverOffset: 10 }]
                 },
                 options: { responsive: true, maintainAspectRatio: false }
             });
         }
 
-        // 新增：繪製 VVIP 顧客消費長條圖
         function renderCustomerBarChart(customersData) {
             const ctx = document.getElementById('customerBarChart').getContext('2d');
             if (customerChartInstance) customerChartInstance.destroy();
@@ -352,18 +369,35 @@ HTML_TEMPLATE = """
                 type: 'bar',
                 data: {
                     labels: labels,
-                    datasets: [{
-                        label: '累積消費額 ($)',
-                        data: totals,
-                        backgroundColor: '#0d6efd',
-                        borderRadius: 5
-                    }]
+                    datasets: [{ label: '消費額', data: totals, backgroundColor: '#6f42c1', borderRadius: 4 }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: { legend: { display: false } },
                     scales: { y: { beginAtZero: true } }
+                }
+            });
+        }
+
+        // 新增：首頁繪製橫向業務銷售排行圖表 (Horizontal Bar)
+        function renderSalesBarChart(salesData) {
+            const ctx = document.getElementById('salesBarChart').getContext('2d');
+            if (salesChartInstance) salesChartInstance.destroy();
+            const labels = salesData.map(item => item['負責人姓名']);
+            const totals = salesData.map(item => item['銷售總額']);
+            salesChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{ label: '銷售總額', data: totals, backgroundColor: '#198754', borderRadius: 4 }]
+                },
+                options: {
+                    indexAxis: 'y', /* 變成橫向競賽圖 */
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { x: { beginAtZero: true } }
                 }
             });
         }
@@ -388,7 +422,7 @@ HTML_TEMPLATE = """
                 keys.forEach(key => {
                     let value = row[key];
                     if (value !== null && value !== undefined && 
-                        (key.includes('單價') || key.includes('金額') || key.includes('平均') || key.includes('銷售額') || key.includes('毛利') || key.includes('總金額'))) {
+                        (key.includes('單價') || key.includes('金額') || key.includes('平均') || key.includes('銷售額') || key.includes('毛利') || key.includes('總額'))) {
                         if (key.includes('率')) { value = parseFloat(value).toFixed(1) + '%'; }
                         else { const numValue = parseFloat(value); if (!isNaN(numValue)) value = '$' + Math.round(numValue).toLocaleString(); }
                     } else if (value === null || value === undefined) { value = '-'; }
@@ -430,26 +464,47 @@ def index():
     """首頁"""
     return render_template_string(HTML_TEMPLATE)
 
-@app.route('/api/customer-ranking')
-def get_customer_ranking():
-    """API: 新增功能 - 顧客累積消費金額排行 (VVIP 排行榜)"""
+@app.route('/api/sales-ranking')
+def get_sales_ranking():
+    """API: 新增功能 - 業務員銷售業績排行榜 (Top Sales 排行)"""
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        # 完完全全對齊你提供的 SQL 邏輯，中文欄位補上雙引號
+        # 完完全全採用你提供的 SQL 指令結構，處理大小寫雙引號
         query = """
             SELECT
-                c."顧客名稱",
+                e."負責人姓名",
                 COUNT(*) AS "訂單筆數",
-                SUM(p."銷售單價" * s."數量") AS "總金額"
+                SUM(p."銷售單價" * s."數量") AS "銷售總額"
             FROM "銷售資料" AS s
+            INNER JOIN "負責人清單" AS e
+                ON s."負責人ID" = e."負責人ID"
             INNER JOIN "商品清單" AS p
                 ON s."商品ID" = p."商品ID"
-            INNER JOIN "顧客清單" AS c
-                ON s."顧客ID" = c."顧客ID"
-            GROUP BY c."顧客ID", c."顧客名稱"
-            ORDER BY "總金額" DESC;
+            GROUP BY e."負責人ID", e."負責人姓名"
+            ORDER BY "銷售總額" DESC;
+        """
+        cur.execute(query)
+        results = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": f"業務員銷售業績排行榜抓取失敗：{str(e)}"}), 500
+
+@app.route('/api/customer-ranking')
+def get_customer_ranking():
+    """API: 顧客累積消費金額排行 (VVIP 排行榜)"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        query = """
+            SELECT c."顧客名稱", COUNT(*) AS "訂單筆數", SUM(p."銷售單價" * s."數量") AS "總金額"
+            FROM "銷售資料" AS s
+            INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
+            INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID"
+            GROUP BY c."顧客ID", c."顧客名稱" ORDER BY "總金額" DESC;
         """
         cur.execute(query)
         results = cur.fetchall()
@@ -499,8 +554,7 @@ def get_sales_by_date():
             INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
             INNER JOIN "負責人清單" AS e ON s."負責人ID" = e."負責人ID"
             INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID"
-            WHERE s."處理日期" BETWEEN %s AND %s
-            ORDER BY s."處理日期" ASC;
+            WHERE s."處理日期" BETWEEN %s AND %s ORDER BY s."處理日期" ASC;
         """
         cur.execute(query, (start_date, end_date))
         results = cur.fetchall()
@@ -512,7 +566,7 @@ def get_sales_by_date():
 
 @app.route('/api/dashboard-stats')
 def get_dashboard_stats():
-    """API: 取得儀表板 KPI 與商品利潤排行 + 前五大顧客排行"""
+    """API: 綜合計算儀表板核心指標"""
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -521,8 +575,7 @@ def get_dashboard_stats():
                 COALESCE(SUM(p."銷售單價" * s."數量"), 0) AS total_sales,
                 COALESCE(SUM((p."銷售單價" - p."進貨單價") * s."數量"), 0) AS total_profit,
                 CASE WHEN SUM(p."銷售單價" * s."數量") > 0 THEN ROUND((SUM((p."銷售單價" - p."進貨單價") * s."數量") * 100.0 / SUM(p."銷售單價" * s."數量")), 1) ELSE 0 END AS margin_rate,
-                COALESCE(SUM(s."數量"), 0) AS total_qty,
-                COUNT(DISTINCT s."顧客ID") AS total_customers,
+                COALESCE(SUM(s."數量"), 0) AS total_qty, COUNT(DISTINCT s."顧客ID") AS total_customers,
                 CASE WHEN COUNT(DISTINCT s."傳票編號") > 0 THEN COALESCE(SUM(p."銷售單價" * s."數量"), 0) / COUNT(DISTINCT s."傳票編號") ELSE 0 END AS avg_order_value
             FROM "銷售資料" s LEFT JOIN "商品清單" p ON s."商品ID" = p."商品ID";
         """
@@ -537,21 +590,26 @@ def get_dashboard_stats():
         cur.execute(top_products_query)
         top_products = cur.fetchall()
 
-        # 這裡同步抓取前五大顧客，用來畫首頁長條圖
         top_customers_query = """
             SELECT c."顧客名稱", SUM(p."銷售單價" * s."數量") AS "總金額"
-            FROM "銷售資料" s
-            INNER JOIN "商品清單" p ON s."商品ID" = p."商品ID"
-            INNER JOIN "顧客清單" c ON s."顧客ID" = c."顧客ID"
-            GROUP BY c."顧客ID", c."顧客名稱"
-            ORDER BY "總金額" DESC LIMIT 5;
+            FROM "銷售資料" s INNER JOIN "商品清單" p ON s."商品ID" = p."商品ID" INNER JOIN "顧客清單" c ON s."顧客ID" = c."顧客ID"
+            GROUP BY c."顧客ID", c."顧客名稱" ORDER BY "總金額" DESC LIMIT 5;
         """
         cur.execute(top_customers_query)
         top_customers = cur.fetchall()
 
+        # 同步抓取前五大 Sales 用來畫首頁競賽圖
+        top_sales_query = """
+            SELECT e."負責人姓名", SUM(p."銷售單價" * s."數量") AS "銷售總額"
+            FROM "銷售資料" s INNER JOIN "負責人清單" e ON s."負責人ID" = e."負責人ID" INNER JOIN "商品清單" p ON s."商品ID" = p."商品ID"
+            GROUP BY e."負責人ID", e."負責人姓名" ORDER BY "銷售總額" DESC LIMIT 5;
+        """
+        cur.execute(top_sales_query)
+        top_sales = cur.fetchall()
+
         cur.close()
         conn.close()
-        return jsonify({"kpi": kpi_result, "top_products": top_products, "top_customers": top_customers})
+        return jsonify({"kpi": kpi_result, "top_products": top_products, "top_customers": top_customers, "top_sales": top_sales})
     except Exception as e:
         return jsonify({"error": f"儀表板數據統計失敗，錯誤訊息：{str(e)}"}), 500
 
