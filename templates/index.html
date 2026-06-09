@@ -16,6 +16,7 @@
         .kpi-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
         .kpi-card-2 { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white; }
         .kpi-card-3 { background: linear-gradient(135deg, #ff9966 0%, #ff5e62 100%); color: white; }
+        .mvp-card { background: linear-gradient(135deg, #f6d365 0%, #fda085 100%); color: #4a2f0f; border: 2px solid #ffc107; }
         .table-responsive { max-height: 400px; overflow-y: auto; }
         .section-panel { display: none; }
         .section-panel.active { display: block; }
@@ -27,7 +28,7 @@
     <div class="sidebar">
         <div class="px-3 mb-4 text-center">
             <h5 class="text-white fw-bold">3C 營運戰情室</h5>
-            <span class="badge bg-danger">v3.0 防錯偵錯版</span>
+            <span class="badge bg-danger">v3.5 精準決策版</span>
         </div>
         <nav class="nav flex-column">
             <a class="nav-link active" href="#" id="link-dashboard" onclick="switchSection('dashboard')">📊 營運總覽儀表板</a>
@@ -42,7 +43,11 @@
     <div class="main-content">
         
         <div id="dashboard" class="section-panel active">
-            <h2 class="mb-4 fw-bold text-dark">📊 營運總覽儀表板</h2>
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2 class="fw-bold text-dark mb-0">📊 營運總覽儀表板</h2>
+                <div id="mvp-banner-container" style="min-width: 320px;"></div>
+            </div>
+            
             <div class="row" id="kpi-container">
                 <div class="col-12 text-center py-3 text-muted">讀取儀表板 KPI 中...</div>
             </div>
@@ -149,7 +154,7 @@
                     </div>
                     <div class="col-md-7">
                         <div class="p-3 bg-light rounded text-secondary" style="font-size: 0.9rem;">
-                            💡 <strong>交叉銷售演算法：</strong>系統會自動搜尋出買過該基準商品的所有客群，並統計這些人還買了哪些其他商品。
+                            💡 <strong>交叉銷售演算法：</strong>系統會自動搜尋出買過該基準商品的所有客群，並統計 these 人還買了哪些其他商品。
                         </div>
                     </div>
                 </div>
@@ -189,10 +194,10 @@
                 </div>
                 <div class="col-md-6">
                     <div class="card p-4">
-                        <h5 class="card-title fw-bold text-warning">📦 倉庫地縛靈：從未被購買的滯銷商品</h5>
+                        <h5 class="card-title fw-bold text-success">✨ 曾消費活躍會員名單 (簡訊精準行銷)</h5>
                         <div class="table-responsive">
-                            <table class="table table-striped" id="deadProductsTable">
-                                <thead class="table-warning"><tr><th>商品ID</th><th>商品名稱</th><th>群組分類</th></tr></thead>
+                            <table class="table table-striped" id="activeCustomersTable">
+                                <thead class="table-success"><tr><th>顧客ID</th><th>顧客名稱</th><th>聯絡電話</th></tr></thead>
                                 <tbody></tbody>
                             </table>
                         </div>
@@ -237,10 +242,10 @@
                         <div class="table-responsive">
                             <table class="table table-hover text-nowrap" id="staffDetailTable">
                                 <thead class="table-dark">
-                                    <tr><th>傳票</th><th>日期</th><th>商品名稱</th><th>單價</th><th>數量</th><th>銷售小計</th><th>創造毛利</th><th>顧客</th></tr>
+                                    <tr><th>傳票</th><th>日期</th><th>商品名稱</th><th>單價</th><th>數量</th><th>全社平均數量</th><th>銷售小計</th><th>創造毛利</th><th>顧客</th></tr>
                                 </thead>
                                 <tbody>
-                                    <tr><td colspan="8" class="text-center text-muted">尚無選擇負責人</td></tr>
+                                    <tr><td colspan="9" class="text-center text-muted">尚無選擇負責人</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -301,17 +306,13 @@
             if (sectionId === 'crm') loadCRMData();
             if (sectionId === 'sales-kpi') {
                 document.getElementById('staffDebugErrorAlert').classList.add('d-none');
-                // 每次切換到業務考核頁面時，動態初始化或確保下拉選單是最新的
                 initStaffDropdown();
             }
             if (sectionId === 'raw-data') loadRawData('sales');
         }
 
-        // 🎯 新增：自動對接資料庫真正人名的動態選單功能
         function initStaffDropdown() {
             const staffSelect = document.getElementById('staffSelect');
-            
-            // 如果已經載入過真正的人名（長度大於 2 代表已經不是只有預設選項），就不用重複撈取
             if (staffSelect.options.length > 2) return;
 
             fetch('/api/get-all-staffs')
@@ -321,7 +322,6 @@
                         staffSelect.innerHTML = `<option value="">❌ 載入失敗: ${data.error}</option>`;
                         return;
                     }
-                    
                     let html = '<option value="">-- 請選擇負責人 --</option>';
                     data.forEach(staff => {
                         const name = staff.負責人姓名;
@@ -336,6 +336,28 @@
         }
 
         function loadDashboard() {
+            // ✨ 功能一：在儀表板頂端異步讀取最高銷售 MVP 金榜
+            fetch('/api/top-sales-mvp')
+                .then(res => res.json())
+                .then(mvpData => {
+                    const container = document.getElementById('mvp-banner-container');
+                    if (mvpData.error || !mvpData || mvpData.length === 0) {
+                        container.innerHTML = '';
+                        return;
+                    }
+                    const names = mvpData.map(m => m.負責人姓名).join(' & ');
+                    const totalSales = Math.round(mvpData[0].銷售總額).toLocaleString();
+                    container.innerHTML = `
+                        <div class="card px-3 py-2 m-0 mvp-card d-flex flex-row align-items-center gap-2">
+                            <span style="font-size: 1.5rem;">👑</span>
+                            <div>
+                                <small class="fw-bold text-uppercase d-block" style="font-size: 0.75rem; letter-spacing: 1px;">全社銷售冠軍 MVP</small>
+                                <strong style="font-size: 1.05rem;">${names} ($${totalSales})</strong>
+                            </div>
+                        </div>
+                    `;
+                }).catch(e => console.error(e));
+
             fetch('/api/dashboard-stats')
                 .then(res => res.json())
                 .then(data => {
@@ -389,44 +411,35 @@
                     if (index === 0) medal = '🥇';
                     if (index === 1) medal = '🥈';
                     if (index === 2) medal = '🥉';
-                    tbody.innerHTML += `<tr><td class="text-center fw-bold">${medal}</td><td class="fw-bold">${row.業務員}</td><td class="text-center">${row.經手訂單數}</td><td class="text-primary fw-bold">$${Math.round(row.總銷售業績).toLocaleString()}</td><td class="text-success fw-bold">$${Math.round(row.創造總毛利).toLocaleString()}</td></tr>`;
+                    tbody.innerHTML += `<tr><td class="text-center fw-bold">${medal}</td><td class="fw-bold">${row.業務員}</td><td class="text-center">${row.經手訂單數}</td><td class="text-primary fw-bold">$${Math.round(row.get_sales || row.總銷售業績).toLocaleString()}</td><td class="text-success fw-bold">$${Math.round(row.創造總毛利).toLocaleString()}</td></tr>`;
                 });
             });
         }
 
-        // ==========================================
-        // 🔥 負責人績效考核與偏好追蹤 前端核心除錯模組
-        // ==========================================
         function loadStaffPerformance() {
             const staffName = document.getElementById('staffSelect').value;
             const debugAlert = document.getElementById('staffDebugErrorAlert');
             
-            // 如果選回預設未選擇
             if (!staffName) {
                 document.getElementById('staffKpiSummary').innerHTML = `<div class="col-12 py-2 text-muted">請從左側下拉選單選擇一位業務負責人。</div>`;
-                document.querySelector('#staffDetailTable tbody').innerHTML = `<tr><td colspan="8" class="text-center text-muted">尚無選擇負責人</td></tr>`;
+                document.querySelector('#staffDetailTable tbody').innerHTML = `<tr><td colspan="9" class="text-center text-muted">尚無選擇負責人</td></tr>`;
                 document.querySelector('#staffPreferenceTable tbody').innerHTML = `<tr><td colspan="4" class="text-center text-muted">尚無選擇負責人</td></tr>`;
                 debugAlert.classList.add('d-none');
                 return;
             }
 
-            debugAlert.classList.add('d-none'); // 先重置隱藏
+            debugAlert.classList.add('d-none');
 
-            // 1. 抓取明細與總計
+            // 1. 撈取明細與全社大盤數量平均值
             fetch(`/api/sales-detail-by-staff?staff_name=${encodeURIComponent(staffName)}`)
                 .then(res => {
                     if (!res.ok) {
-                        return res.json().then(errData => { throw new Error(errData.error || `HTTP 錯誤代碼 ${res.status}`); });
+                        return res.json().then(errData => { throw new Error(errData.error || `HTTP 錯誤 ${res.status}`); });
                     }
                     return res.json();
                 })
                 .then(data => {
-                    console.log("Staff Details Response:", data);
-                    
-                    // 防錯：萬一後端回傳有錯誤標籤
-                    if (data.error) {
-                        throw new Error(data.error);
-                    }
+                    if (data.error) throw new Error(data.error);
 
                     const summary = data.summary || { total_sales: 0, total_profit: 0 };
                     document.getElementById('staffKpiSummary').innerHTML = `
@@ -436,15 +449,17 @@
 
                     const detailBody = document.querySelector('#staffDetailTable tbody');
                     if (!data.sales_detail || data.sales_detail.length === 0) {
-                        detailBody.innerHTML = `<tr><td colspan="8" class="text-center text-warning fw-bold">⚠ 資料庫查無【${staffName}】的任何銷售明細。請確認資料主檔中是否有此負責人的成交紀錄！</td></tr>`;
+                        detailBody.innerHTML = `<tr><td colspan="9" class="text-center text-warning fw-bold">⚠ 資料庫查無【${staffName}】的任何銷售明細。</td></tr>`;
                     } else {
+                        // ✨ 功能三前端：動態渲染「全社平均數量」欄位
                         detailBody.innerHTML = data.sales_detail.map(row => `
                             <tr>
                                 <td><span class="badge bg-secondary">${row["傳票編號"] || '-'}</span></td>
                                 <td>${row["交易日期"] || '-'}</td>
                                 <td class="fw-bold">${row["商品名稱"] || '-'}</td>
                                 <td>$${Number(row["販賣單價"] || 0).toLocaleString()}</td>
-                                <td>${row["數量"] || 0}</td>
+                                <td class="fw-bold">${row["數量"] || 0}</td>
+                                <td class="text-muted fw-bold bg-light text-center">${row["全社平均數量"] !== null ? row["全社平均數量"] + ' 件' : '-'}</td>
                                 <td class="fw-bold text-primary">$${Math.round(row["銷售小計"] || 0).toLocaleString()}</td>
                                 <td class="text-success fw-bold">$${Math.round(row["創造毛利小計"] || 0).toLocaleString()}</td>
                                 <td><span class="badge bg-info text-dark">${row["顧客名稱"] || '-'}</span></td>
@@ -453,7 +468,7 @@
                     }
                 })
                 .catch(err => {
-                    console.error("Staff Detail API 噴錯:", err);
+                    console.error(err);
                     debugAlert.classList.remove('d-none');
                     debugAlert.innerHTML = `❌ 明細模組讀取失敗！錯誤回報：<br>${err.message}`;
                 });
@@ -465,14 +480,11 @@
                     return res.json();
                 })
                 .then(data => {
-                    console.log("Staff Preference Response:", data);
                     const prefBody = document.querySelector('#staffPreferenceTable tbody');
-                    
                     if (data.error) {
                         prefBody.innerHTML = `<tr><td colspan="4" class="text-danger fw-bold">${data.error}</td></tr>`;
                         return;
                     }
-
                     if (!data || data.length === 0) {
                         prefBody.innerHTML = `<tr><td colspan="4" class="text-center text-muted">暫無客戶偏好地圖數據</td></tr>`;
                     } else {
@@ -487,13 +499,39 @@
                     }
                 })
                 .catch(err => {
-                    console.error("Staff Preference API 噴錯:", err);
+                    console.error(err);
                     debugAlert.classList.remove('d-none');
                     debugAlert.innerHTML += `<br><br>❌ 偏好模型讀取失敗！錯誤回報：<br>${err.message}`;
                 });
         }
 
-        // --- 其他既有功能的 JS 保持正常運作 ---
+        function loadCRMData() {
+            fetch('/api/sleeping-members').then(res=>res.json()).then(data=>{
+                document.getElementById('sleepingTable').querySelector('tbody').innerHTML = data.map(r=>`<tr><td>${r.顧客id}</td><td class="fw-bold">${r.顧客名稱}</td><td>${r.聯絡電話||'無'}</td></tr>`).join('');
+            });
+            
+            // ✨ 功能二前端：動態撈取並渲染有過消費紀錄的活躍黃金會員
+            fetch('/api/active-customers').then(res=>res.json()).then(data=>{
+                const tbody = document.getElementById('activeCustomersTable').querySelector('tbody');
+                if(data.error) { tbody.innerHTML=`<tr><td colspan="3" class="text-danger">${data.error}</td></tr>`; return; }
+                tbody.innerHTML = data.map(r=>`<tr><td>${r.顧客id}</td><td class="fw-bold text-success">${r.顧客名稱}</td><td>${r.聯絡電話||'無'}</td></tr>`).join('');
+            }).catch(e=>console.error(e));
+
+            fetch('/api/dead-products').then(res=>res.json()).then(data=>{
+                document.getElementById('deadProductsTable').querySelector('tbody').innerHTML = data.map(r=>`<tr><td>${r.商品id}</td><td class="fw-bold text-danger">${r.商品名稱}</td><td><span class="badge bg-secondary">${r.群組名稱}</span></td></tr>`).join('');
+            });
+
+            fetch('/api/customer-footprint').then(res=>res.json()).then(data=>{
+                document.getElementById('footprintTable').querySelector('tbody').innerHTML = data.map(r=>`
+                    <tr>
+                        <td>${r.顧客id}</td><td class="fw-bold">${r.顧客名稱}</td><td>${r.聯絡電話||'-'}</td>
+                        <td>${r.傳票編號 ? `<span class="badge bg-primary">${r.傳票編號}</span>` : '<span class="badge bg-danger">無消費紀錄</span>'}</td>
+                        <td>${r.處理日期||'-'}</td><td>${r.購買數量||0}</td>
+                    </tr>
+                `).join('');
+            });
+        }
+
         function loadProductLineAnalysis() {
             const groupName = document.getElementById('groupSelect').value;
             document.getElementById('productLineTitle').innerText = `📊 【${groupName}】產品線銷貨營運明細`;
@@ -534,24 +572,6 @@
                         </tr>
                     `).join('');
                 });
-        }
-
-        function loadCRMData() {
-            fetch('/api/sleeping-members').then(res=>res.json()).then(data=>{
-                document.getElementById('sleepingTable').querySelector('tbody').innerHTML = data.map(r=>`<tr><td>${r.顧客id}</td><td class="fw-bold">${r.顧客名稱}</td><td>${r.聯絡電話||'無'}</td></tr>`).join('');
-            });
-            fetch('/api/dead-products').then(res=>res.json()).then(data=>{
-                document.getElementById('deadProductsTable').querySelector('tbody').innerHTML = data.map(r=>`<tr><td>${r.商品id}</td><td class="fw-bold text-danger">${r.商品名稱}</td><td><span class="badge bg-secondary">${r.群組名稱}</span></td></tr>`).join('');
-            });
-            fetch('/api/customer-footprint').then(res=>res.json()).then(data=>{
-                document.getElementById('footprintTable').querySelector('tbody').innerHTML = data.map(r=>`
-                    <tr>
-                        <td>${r.顧客id}</td><td class="fw-bold">${r.顧客名稱}</td><td>${r.聯絡電話||'-'}</td>
-                        <td>${r.傳票編號 ? `<span class="badge bg-primary">${r.傳票編號}</span>` : '<span class="badge bg-danger">無消費紀錄</span>'}</td>
-                        <td>${r.處理日期||'-'}</td><td>${r.購買數量||0}</td>
-                    </tr>
-                `).join('');
-            });
         }
 
         function loadRawData(type) {

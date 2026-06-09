@@ -18,7 +18,7 @@ def index():
     return render_template('index.html')
 
 # ==========================================
-# 🎖️ 負責人績效考核與偏好追蹤 API 模組 (加強防錯版)
+# 🎖️ 負責人績效考核與偏好追蹤 API 模組 (加強防錯 + 全社平均對比版)
 # ==========================================
 
 @app.route('/api/sales-detail-by-staff')
@@ -29,7 +29,7 @@ def get_sales_detail_by_staff():
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                # 撈取銷售明細
+                # ✨ 功能三：在 SELECT 中加入子查詢，動態計算該商品在全公司的平均歷史購買量
                 query = """
                     SELECT 
                         s."傳票編號", 
@@ -37,6 +37,11 @@ def get_sales_detail_by_staff():
                         p."商品名稱", 
                         p."販賣單價", 
                         s."數量",
+                        ROUND((
+                            SELECT AVG(s2."數量")
+                            FROM "販賣資料" AS s2
+                            WHERE s2."商品ID" = s."商品ID"
+                        ), 1) AS "全社平均數量",
                         COALESCE((p."販賣單價" * s."數量"), 0) AS "銷售小計",
                         COALESCE(((p."販賣單價" - p."進貨單價") * s."數量"), 0) AS "創造毛利小計",
                         c."顧客名稱"
@@ -62,7 +67,6 @@ def get_sales_detail_by_staff():
             "sales_detail": sales_detail
         })
     except Exception as e:
-        # 回傳 500 與錯誤訊息，方便在網頁端直接看到是不是 SQL 語法或欄位出錯
         return jsonify({"error": f"資料庫讀取負責人明細失敗：{str(e)}", "sales_detail": []}), 500
 
 @app.route('/api/customer-preference-by-staff')
@@ -92,6 +96,64 @@ def get_customer_preference_by_staff():
         return jsonify(results)
     except Exception as e:
         return jsonify({"error": f"資料庫讀取負責人偏好地圖失敗：{str(e)}"}), 500
+
+# ✨ 功能一：新增尋找銷售冠軍（包含並列第一）的 API 路由
+@app.route('/api/top-sales-mvp')
+def get_top_sales_mvp():
+    """找出目前銷售總額最高的業務員（支援並列第一）"""
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                query = """
+                    SELECT
+                        e."負責人姓名",
+                        SUM(p."販賣單價" * s."數量") AS "銷售總額"
+                    FROM "販賣資料" AS s
+                    INNER JOIN "負責人清單" AS e ON s."負責人ID" = e."負責人ID"
+                    INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
+                    GROUP BY e."負責人ID", e."負責人姓名"
+                    HAVING SUM(p."販賣單價" * s."數量") = (
+                        SELECT MAX(sub.銷售總額)
+                        FROM (
+                            SELECT s2."負責人ID", SUM(p2."販賣單價" * s2."數量") AS 銷售總額
+                            FROM "販賣資料" AS s2
+                            INNER JOIN "商品清單" AS p2 ON s2."商品ID" = p2."商品ID"
+                            GROUP BY s2."負責人ID"
+                        ) AS sub
+                    );
+                """
+                cur.execute(query)
+                results = cur.fetchall()
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": f"讀取銷售冠軍失敗：{str(e)}"}), 500
+
+# ✨ 功能二：新增過濾有消費紀錄客戶的 API 路由
+@app.route('/api/active-customers')
+def get_active_customers():
+    """使用 EXISTS 找出所有真正有過消費明細的黃金活躍客戶"""
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                query = """
+                    SELECT
+                        c."顧客ID" AS "顧客id",
+                        c."顧客名稱",
+                        c."聯絡電話"
+                    FROM "顧客清單" AS c
+                    WHERE EXISTS (
+                        SELECT 1
+                        FROM "販賣資料" AS s
+                        WHERE s."顧客ID" = c."顧客ID"
+                    )
+                    ORDER BY c."顧客ID" ASC;
+                """
+                cur.execute(query)
+                results = cur.fetchall()
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": f"讀取活躍會員失敗：{str(e)}"}), 500
+
 
 # --- 🚀 其他既有 API 模組保持完整運作 ---
 @app.route('/api/cross-selling-analysis')
@@ -331,11 +393,8 @@ def get_customers():
     except Exception as e:
         return jsonify({"error": f"客戶資料失敗：{str(e)}"}), 500
 
-# 請將這段程式碼加在 app.py 的負責人 API 模組附近
-
 @app.route('/api/get-all-staffs')
 def get_all_staffs():
-    """動態撈取資料庫內所有真正的業務員名單"""
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
