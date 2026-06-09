@@ -102,13 +102,9 @@
                 <div class="row align-items-center">
                     <div class="col-md-4">
                         <label class="form-label fw-bold">請選擇欲分析的商品群組：</label>
-                        <select class="form-select" id="groupSelect" onchange="loadProductLineAnalysis()">
-                            <option value="電腦主機">💻 電腦主機</option>
-                            <option value="周邊配件">🖱️ 周邊配件</option>
-                            <option value="網路設備">🌐 網路設備</option>
-                            <option value="手機">📱 手機</option>
-                            <option value="ALL">🔍 查看全品線大宗掃貨排行</option>
-                        </select>
+                        <select class="form-select fw-bold" id="groupSelect" onchange="loadProductLineAnalysis()">
+                            <option value="">-- 正在讀取資料庫商品群組... --</option>
+                        </select>    
                     </div>
                     <div class="col-md-8">
                         <div class="p-3 bg-light rounded text-secondary" style="font-size: 0.9rem;">
@@ -154,7 +150,7 @@
                     </div>
                     <div class="col-md-7">
                         <div class="p-3 bg-light rounded text-secondary" style="font-size: 0.9rem;">
-                            💡 <strong>交叉銷售演算法：</strong>系統會自動搜尋出買過該基準商品的所有客群，並統計這些人還買了哪些其他商品。
+                            💡 <strong>交叉銷售演算法：</strong>系統會自動搜尋出買過該基準商品的所有客群，並統計 these 人還買了哪些其他商品。
                         </div>
                     </div>
                 </div>
@@ -335,29 +331,11 @@
             "家電": "📺"
         };
 
-        function switchSection(sectionId) {
-            document.querySelectorAll('.section-panel').forEach(el => el.classList.remove('active'));
-            document.querySelectorAll('.sidebar .nav-link').forEach(el => el.classList.remove('active'));
+        // ✨ 新增優化：動態讀取商品主檔，智慧提取所有的商品群組來渲染「銷貨營運分析」下拉選單
+        function initProductGroupDropdown() {
+            const selectEl = document.getElementById('groupSelect');
             
-            document.getElementById(sectionId).classList.add('active');
-            document.getElementById(`link-${sectionId}`).classList.add('active');
-            
-            if (sectionId === 'dashboard') loadDashboard();
-            if (sectionId === 'product-line') loadProductLineAnalysis();
-            if (sectionId === 'cross-selling') loadCrossSellingAnalysis();
-            if (sectionId === 'crm') loadCRMData();
-            if (sectionId === 'sales-kpi') {
-                document.getElementById('staffDebugErrorAlert').classList.add('d-none');
-                initStaffDropdown();
-            }
-            if (sectionId === 'raw-data') loadRawData('sales');
-        }
-
-        // ✨ 全新優化：動態讀取商品主檔，智慧提取所有的商品群組來渲染下拉選單
-        function initCrmGroupDropdown() {
-            const selectEl = document.getElementById('crmGroupSelect');
-            
-            // 如果已經加載過選項，則不重複發送請求
+            // 如果已經加載過選項（長度大於 1），則不重複發送請求
             if (selectEl.options.length > 1) return Promise.resolve();
 
             return fetch('/api/products')
@@ -371,13 +349,43 @@
                     let html = '';
                     groups.forEach((group, idx) => {
                         const emoji = groupEmojis[group] || "📦";
+                        html += `<option value="${group}" ${idx === 0 ? 'selected' : ''}>${emoji} ${group}</option>`;
+                    });
+                    
+                    // 保留原本查看全部的選項
+                    html += `<option value="ALL">🔍 查看全品線大宗掃貨排行</option>`;
+                    
+                    selectEl.innerHTML = html;
+                })
+                .catch(err => {
+                    console.error("初始化營運分析商品群組失敗:", err);
+                    selectEl.innerHTML = '<option value="">❌ 無法載入商品群組</option>';
+                });
+        }
+
+        // 動態讀取商品主檔，智慧提取所有的商品群組來渲染「CRM 精準行銷」下拉選單
+        function initCrmGroupDropdown() {
+            const selectEl = document.getElementById('crmGroupSelect');
+            
+            if (selectEl.options.length > 1) return Promise.resolve();
+
+            return fetch('/api/products')
+                .then(res => res.json())
+                .then(products => {
+                    if (products.error) throw new Error(products.error);
+                    
+                    const groups = [...new Set(products.map(p => p.群組名稱))].filter(g => g);
+                    
+                    let html = '';
+                    groups.forEach((group, idx) => {
+                        const emoji = groupEmojis[group] || "📦";
                         html += `<option value="${group}" ${idx === 0 ? 'selected' : ''}>${emoji} ${group} 精準客群</option>`;
                     });
                     
                     selectEl.innerHTML = html;
                 })
                 .catch(err => {
-                    console.error("初始化商品群組失敗:", err);
+                    console.error("初始化 CRM 商品群組失敗:", err);
                     selectEl.innerHTML = '<option value="">❌ 無法載入商品群組</option>';
                 });
         }
@@ -404,6 +412,31 @@
                     console.error("無法動態載入負責人選單:", err);
                     staffSelect.innerHTML = '<option value="">❌ 網路或 API 異常</option>';
                 });
+        }
+
+        function switchSection(sectionId) {
+            document.querySelectorAll('.section-panel').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.sidebar .nav-link').forEach(el => el.classList.remove('active'));
+            
+            document.getElementById(sectionId).classList.add('active');
+            document.getElementById(`link-${sectionId}`).classList.add('active');
+            
+            if (sectionId === 'dashboard') loadDashboard();
+            
+            // ✨ 修改此處：切換到產品線分析分頁時，先動態加載選單，完成後再執行第一次查詢
+            if (sectionId === 'product-line') {
+                initProductGroupDropdown().then(() => {
+                    loadProductLineAnalysis();
+                });
+            }
+            
+            if (sectionId === 'cross-selling') loadCrossSellingAnalysis();
+            if (sectionId === 'crm') loadCRMData();
+            if (sectionId === 'sales-kpi') {
+                document.getElementById('staffDebugErrorAlert').classList.add('d-none');
+                initStaffDropdown();
+            }
+            if (sectionId === 'raw-data') loadRawData('sales');
         }
 
         function loadDashboard() {
@@ -556,7 +589,6 @@
         }
 
         function loadCRMData() {
-            // 先獲取沉睡會員與基本足跡
             fetch('/api/sleeping-members').then(res=>res.json()).then(data=>{
                 document.getElementById('sleepingTable').querySelector('tbody').innerHTML = data.map(r=>`<tr><td>${r.顧客id}</td><td class="fw-bold">${r.顧客名稱}</td><td>${r.聯絡電話||'無'}</td></tr>`).join('');
             });
@@ -576,13 +608,11 @@
                 `).join('');
             });
 
-            // ✨ 先執行下拉選單動態初始化，加載完成後再觸發第一次的群組過濾
             initCrmGroupDropdown().then(() => {
                 loadCustomersByGroup();
             });
         }
 
-        // ✨ 智慧連動過濾：不寫死任何群組，完全跟隨選單狀態發送帶有群組特徵的 SQL 查詢
         function loadCustomersByGroup() {
             const selectedGroup = document.getElementById('crmGroupSelect').value;
             if (!selectedGroup) return;
@@ -618,11 +648,20 @@
 
         function loadProductLineAnalysis() {
             const groupName = document.getElementById('groupSelect').value;
+            if (!groupName) return; // 防呆處理
+
             document.getElementById('productLineTitle').innerText = `📊 【${groupName}】產品線銷貨營運明細`;
+            
+            const tbody = document.querySelector('#productLineTable tbody');
+            tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted">正在讀取【${groupName}】銷貨資料...</td></tr>`;
+
             fetch(`/api/sales-by-group?group_name=${encodeURIComponent(groupName)}`)
                 .then(res => res.json())
                 .then(data => {
-                    const tbody = document.querySelector('#productLineTable tbody');
+                    if (data.length === 0) {
+                        tbody.innerHTML = `<tr><td colspan="9" class="text-center text-warning fw-bold">⚠ 查無此產品線的銷售紀錄。</td></tr>`;
+                        return;
+                    }
                     tbody.innerHTML = data.map(row => `
                         <tr>
                             <td><span class="badge bg-secondary">${row.傳票編號}</span></td>
@@ -636,6 +675,9 @@
                             <td>${row.經手業務}</td>
                         </tr>
                     `).join('');
+                })
+                .catch(err => {
+                    tbody.innerHTML = `<tr><td colspan="9" class="text-danger text-center fw-bold">❌ 載入產品線明細失敗</td></tr>`;
                 });
         }
 
