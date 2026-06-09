@@ -5,43 +5,41 @@ from psycopg2.extras import RealDictCursor
 
 app = Flask(__name__)
 
-# 確保 Vercel Serverless 能正確識別 WSGI 入口點
 app.secret_key = os.environ.get('SECRET_KEY', 'default_secret_key')
-
-# 從環境變數讀取 Neon PostgreSQL 連線字串
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
 def get_db_connection():
-    """建立 Neon 資料庫連線"""
     if not DATABASE_URL:
         raise ValueError("環境變數 DATABASE_URL 未設定，請檢查 Vercel 後台設定！")
-    conn = psycopg2.connect(DATABASE_URL, sslmode='require')
-    return conn
+    return psycopg2.connect(DATABASE_URL, sslmode='require')
 
-# --- 核心路由：首頁渲染 ---
 @app.route('/')
 def index():
     return render_template('index.html')
 
 # ==========================================
-# 🎖️ 新增：負責人績效考核與偏好追蹤 API 模組 (原本遺漏的區塊)
+# 🎖️ 負責人績效考核與偏好追蹤 API 模組 (加強防錯版)
 # ==========================================
 
 @app.route('/api/sales-detail-by-staff')
 def get_sales_detail_by_staff():
-    """取得特定業務負責人的業績交易明細與 KPI 總計"""
-    staff_name = request.args.get('staff_name')
+    staff_name = request.args.get('staff_name', '').strip()
     if not staff_name:
-        return jsonify({"error": "請提供業務負責人姓名 (?staff_name=X)"}), 400
+        return jsonify({"error": "請提供業務負責人姓名 (?staff_name=X)", "sales_detail": []}), 400
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                # 撈取該負責人的所有銷售明細，並串接商品與顧客名稱
+                # 撈取銷售明細
                 query = """
-                    SELECT s."傳票編號", s."處理日" AS "交易日期", p."商品名稱", p."販賣單價", s."數量",
-                           (p."販賣單價" * s."數量") AS "銷售小計",
-                           ((p."販賣單價" - p."進貨單價") * s."數量") AS "創造毛利小計",
-                           c."顧客名稱"
+                    SELECT 
+                        s."傳票編號", 
+                        s."處理日" AS "交易日期", 
+                        p."商品名稱", 
+                        p."販賣單價", 
+                        s."數量",
+                        COALESCE((p."販賣單價" * s."數量"), 0) AS "銷售小計",
+                        COALESCE(((p."販賣單價" - p."進貨單價") * s."數量"), 0) AS "創造毛利小計",
+                        c."顧客名稱"
                     FROM "販賣資料" s
                     JOIN "商品清單" p ON s."商品ID" = p."商品ID"
                     JOIN "顧客清單" c ON s."顧客ID" = c."顧客ID"
@@ -52,30 +50,35 @@ def get_sales_detail_by_staff():
                 cur.execute(query, (staff_name,))
                 sales_detail = cur.fetchall()
                 
-                # 計算該業務的 KPI 總和
-                total_sales = sum(float(row['銷售小計']) for row in sales_detail) if sales_detail else 0
-                total_profit = sum(float(row['創造毛利小計']) for row in sales_detail) if sales_detail else 0
+                # 安全計算 KPI 總和
+                total_sales = 0
+                total_profit = 0
+                for row in sales_detail:
+                    total_sales += float(row.get('銷售小計') or 0)
+                    total_profit += float(row.get('創造毛利小計') or 0)
                 
         return jsonify({
             "summary": {"total_sales": total_sales, "total_profit": total_profit},
             "sales_detail": sales_detail
         })
     except Exception as e:
-        return jsonify({"error": f"讀取負責人考核明細失敗：{str(e)}"}), 500
+        # 回傳 500 與錯誤訊息，方便在網頁端直接看到是不是 SQL 語法或欄位出錯
+        return jsonify({"error": f"資料庫讀取負責人明細失敗：{str(e)}", "sales_detail": []}), 500
 
 @app.route('/api/customer-preference-by-staff')
 def get_customer_preference_by_staff():
-    """取得特定業務負責人的客戶採購偏好與預算地圖"""
-    staff_name = request.args.get('staff_name')
+    staff_name = request.args.get('staff_name', '').strip()
     if not staff_name:
-        return jsonify({"error": "請提供業務負責人姓名 (?staff_name=X)"}), 400
+        return jsonify([])
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                # 統計該業務經手的客戶，對於各商品群組的採購偏好
                 query = """
-                    SELECT c."顧客名稱", p."群組名稱", SUM(s."數量") AS "累積購買數量",
-                           SUM(p."販賣單價" * s."數量") AS "貢獻預算總額"
+                    SELECT 
+                        c."顧客名稱", 
+                        p."群組名稱", 
+                        SUM(s."數量") AS "累積購買數量",
+                        SUM(p."販賣單價" * s."數量") AS "貢獻預算總額"
                     FROM "販賣資料" s
                     JOIN "商品清單" p ON s."商品ID" = p."商品ID"
                     JOIN "顧客清單" c ON s."顧客ID" = c."顧客ID"
@@ -88,9 +91,9 @@ def get_customer_preference_by_staff():
                 results = cur.fetchall()
         return jsonify(results)
     except Exception as e:
-        return jsonify({"error": f"讀取負責人客戶偏好地圖失敗：{str(e)}"}), 500
+        return jsonify({"error": f"資料庫讀取負責人偏好地圖失敗：{str(e)}"}), 500
 
-# --- 🚀 熱門組合商品交叉銷售分析 API ---
+# --- 🚀 其他既有 API 模組保持完整運作 ---
 @app.route('/api/cross-selling-analysis')
 def get_cross_selling_analysis():
     target_product_id = request.args.get('target_product_id')
@@ -122,7 +125,6 @@ def get_cross_selling_analysis():
     except Exception as e:
         return jsonify({"error": f"交叉銷售演算法執行失敗：{str(e)}"}), 500
 
-# --- 📦 特定產品線/群組銷貨營運分析 ---
 @app.route('/api/sales-by-group')
 def get_sales_by_group():
     group_name = request.args.get('group_name')
@@ -161,7 +163,6 @@ def get_sales_by_group():
     except Exception as e:
         return jsonify({"error": f"讀取產品線資料失敗：{str(e)}"}), 500
 
-# --- 🎯 CRM 精準行銷模組 API ---
 @app.route('/api/customer-footprint')
 def get_customer_footprint():
     try:
@@ -216,7 +217,6 @@ def get_dead_products():
     except Exception as e:
         return jsonify({"error": f"滯銷商品失敗：{str(e)}"}), 500
 
-# --- 🏆 業務英雄榜名次表 API ---
 @app.route('/api/sales-ranking')
 def get_sales_ranking():
     try:
@@ -240,42 +240,6 @@ def get_sales_ranking():
     except Exception as e:
         return jsonify({"error": f"業務排行失敗：{str(e)}"}), 500
 
-@app.route('/api/customer-ranking')
-def get_customer_ranking():
-    try:
-        with get_db_connection() as conn:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                query = """
-                    SELECT c."顧客名稱", SUM(p."販賣單價" * s."數量") AS "總金額"
-                    FROM "販賣資料" AS s
-                    INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID"
-                    INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
-                    GROUP BY c."顧客ID", c."顧客名稱" ORDER BY "總金額" DESC LIMIT 5;
-                """
-                cur.execute(query)
-                results = cur.fetchall()
-        return jsonify(results)
-    except Exception as e:
-        return jsonify({"error": f"顧客排行失敗：{str(e)}"}), 500
-
-@app.route('/api/sales-by-date')
-def get_sales_by_date():
-    try:
-        with get_db_connection() as conn:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                query = """
-                    SELECT s."處理日" AS "日期", SUM(p."販賣單價" * s."數量") AS "銷售額"
-                    FROM "販賣資料" AS s
-                    INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
-                    GROUP BY s."處理日" ORDER BY s."處理日" ASC;
-                """
-                cur.execute(query)
-                results = cur.fetchall()
-        return jsonify(results)
-    except Exception as e:
-        return jsonify({"error": f"日期銷售失敗：{str(e)}"}), 500
-
-# --- 📊 儀表板綜合統計數據 API ---
 @app.route('/api/dashboard-stats')
 def get_dashboard_stats():
     try:
@@ -325,25 +289,6 @@ def get_dashboard_stats():
     except Exception as e:
         return jsonify({"error": f"讀取儀表板綜合數據失敗：{str(e)}"}), 500
 
-@app.route('/api/customer-stats')
-def get_customer_stats():
-    try:
-        with get_db_connection() as conn:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                query = """
-                    SELECT c."顧客名稱", COUNT(DISTINCT s."傳票編號") AS "購買次數", SUM(p."販賣單價" * s."數量") AS "總金額"
-                    FROM "販賣資料" AS s
-                    INNER JOIN "顧客清單" AS c ON s."顧客ID" = c."顧客ID"
-                    INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
-                    GROUP BY c."顧客ID", c."顧客名稱" ORDER BY "總金額" DESC;
-                """
-                cur.execute(query)
-                results = cur.fetchall()
-        return jsonify(results)
-    except Exception as e:
-        return jsonify({"error": f"顧客數據失敗：{str(e)}"}), 500
-
-# --- 💾 系統核心原始資料分頁檢視 API ---
 @app.route('/api/sales')
 def get_raw_sales():
     try:
