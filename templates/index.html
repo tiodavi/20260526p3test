@@ -12,217 +12,284 @@
         .sidebar .nav-link { color: #adb5bd; padding: 12px 20px; font-weight: 500; display: flex; align-items: center; text-decoration: none; }
         .sidebar .nav-link:hover, .sidebar .nav-link.active { color: #fff; background-color: #0d6efd; }
         .main-content { margin-left: 240px; padding: 30px; }
-        .card { border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-radius: 10px; margin-bottom: 25px; }
-        .metric-card { padding: 20px; color: white; border-radius: 10px; }
-        .bg-gradient-primary { background: linear-gradient(135deg, #4e73df 0%, #224abe 100%); }
-        .bg-gradient-success { background: linear-gradient(135deg, #1cc88a 0%, #13855c 100%); }
-        .bg-gradient-info { background: linear-gradient(135deg, #36b9cc 0%, #258391 100%); }
-        .bg-gradient-warning { background: linear-gradient(135deg, #f6c23e 0%, #dda20a 100%); }
+        .card { border: none; box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.05); border-radius: 10px; margin-bottom: 25px; }
+        .kpi-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .kpi-card-2 { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white; }
+        .kpi-card-3 { background: linear-gradient(135deg, #ff9966 0%, #ff5e62 100%); color: white; }
+        .table-responsive { max-height: 400px; overflow-y: auto; }
         .section-panel { display: none; }
         .section-panel.active { display: block; }
-        .table th { background-color: #f1f3f5; color: #495057; font-weight: 600; }
+        .badge-group { background-color: #e9ecef; color: #495057; }
     </style>
 </head>
 <body>
 
     <div class="sidebar">
-        <h4 class="text-white text-center mb-4 fw-bold">🛒 3C 進銷存系統</h4>
+        <div class="px-3 mb-4 text-center">
+            <h5 class="text-white fw-bold">3C 營運戰情室</h5>
+            <span class="badge bg-danger">v3.0 防錯偵錯版</span>
+        </div>
         <nav class="nav flex-column">
-            <a class="nav-link active" href="#" id="link-dashboard" onclick="switchSection('dashboard')">📊 綜合營運儀表板</a>
-            <a class="nav-link" href="#" id="link-product-line" onclick="switchSection('product-line')">📦 產品線利潤分析</a>
-            <a class="nav-link" href="#" id="link-cross-selling" onclick="switchSection('cross-selling')">🎯 交叉銷售關聯推薦</a>
-            <a class="nav-link" href="#" id="link-crm" onclick="switchSection('crm')">👥 CRM 客戶標籤與防流失</a>
-            <a class="nav-link" href="#" id="link-sales-kpi" onclick="switchSection('sales-kpi')">🎖️ 負責人績效與偏好</a>
-            <a class="nav-link" href="#" id="link-raw-data" onclick="switchSection('raw-data')">🗄️ 核心資料庫明細表</a>
+            <a class="nav-link active" href="#" id="link-dashboard" onclick="switchSection('dashboard')">📊 營運總覽儀表板</a>
+            <a class="nav-link" href="#" id="link-product-line" onclick="switchSection('product-line')">📦 產品線銷貨營運</a>
+            <a class="nav-link" href="#" id="link-cross-selling" onclick="switchSection('cross-selling')">🤝 組合商品交叉銷售</a>
+            <a class="nav-link" href="#" id="link-crm" onclick="switchSection('crm')">🎯 CRM 精準行銷模組</a>
+            <a class="nav-link" href="#" id="link-sales-kpi" onclick="switchSection('sales-kpi')">🎖️ 負責人績效考核與偏好追蹤</a>
+            <a class="nav-link" href="#" id="link-raw-data" onclick="switchSection('raw-data')">💾 系統核心原始資料</a>
         </nav>
     </div>
 
     <div class="main-content">
         
         <div id="dashboard" class="section-panel active">
-            <h2 class="mb-4 fw-bold text-dark">📊 綜合營運儀表板 (核心指標即時觀測)</h2>
+            <h2 class="mb-4 fw-bold text-dark">📊 營運總覽儀表板</h2>
+            <div class="row" id="kpi-container">
+                <div class="col-12 text-center py-3 text-muted">讀取儀表板 KPI 中...</div>
+            </div>
+            
             <div class="row">
-                <div class="col-md-3">
-                    <div class="metric-card bg-gradient-primary">
-                        <h6>累計總營業額</h6>
-                        <h2 id="m-revenue" class="fw-bold">$0</h2>
+                <div class="col-md-6">
+                    <div class="card p-4">
+                        <h5 class="card-title fw-bold mb-3">🔥 創造毛利 Top 5 明星單品</h5>
+                        <canvas id="chartProducts"></canvas>
                     </div>
                 </div>
-                <div class="col-md-3">
-                    <div class="metric-card bg-gradient-success">
-                        <h6>獨立訂單總數</h6>
-                        <h2 id="m-orders" class="fw-bold">0 筆</h2>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="metric-card bg-gradient-info">
-                        <h6>商品出貨總量</h6>
-                        <h2 id="m-qty" class="fw-bold">0 件</h2>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="metric-card bg-gradient-warning">
-                        <h6>建檔客戶總數</h6>
-                        <h2 id="m-customers" class="fw-bold">0 戶</h2>
+                <div class="col-md-6">
+                    <div class="card p-4">
+                        <h5 class="card-title fw-bold mb-3">👑 顧客貢獻排行 Top 5</h5>
+                        <canvas id="chartCustomers"></canvas>
                     </div>
                 </div>
             </div>
-            
-            <div class="row mt-4">
-                <div class="col-md-7">
-                    <div class="card p-3">
-                        <h5 class="fw-bold mb-3">📈 銷售金額歷史趨勢走勢圖</h5>
-                        <canvas id="trendChart" height="150"></canvas>
+
+            <div class="row mt-2">
+                <div class="col-md-5">
+                    <div class="card p-4">
+                        <h5 class="card-title fw-bold mb-3 text-primary">🎖️ 業務經手業績 PK 圖</h5>
+                        <canvas id="chartSalesRanking"></canvas>
                     </div>
                 </div>
-                <div class="col-md-5">
-                    <div class="card p-3">
-                        <h5 class="fw-bold mb-3">🏆 熱銷商品分類營收佔比</h5>
-                        <canvas id="pieChart" height="220"></canvas>
+                <div class="col-md-7">
+                    <div class="card p-4">
+                        <h5 class="card-title fw-bold mb-3 text-success">🏆 業務英雄榜名次表</h5>
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover align-middle mb-0" id="salesRankingTable">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th style="width: 80px;" class="text-center">名次</th>
+                                        <th>業務員</th>
+                                        <th class="text-center">經手訂單數</th>
+                                        <th>總銷售業績</th>
+                                        <th>為公司創造總毛利</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
         <div id="product-line" class="section-panel">
-            <h2 class="mb-4 fw-bold text-dark">📦 產品線營運狀況與獲利矩陣</h2>
+            <h2 class="mb-4 fw-bold text-dark">📦 特定產品線銷貨營運分析</h2>
+            <div class="card p-4 mb-4">
+                <div class="row align-items-center">
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">請選擇欲分析的商品群組：</label>
+                        <select class="form-select" id="groupSelect" onchange="loadProductLineAnalysis()">
+                            <option value="電腦主機">💻 電腦主機</option>
+                            <option value="周邊配件">🖱️ 周邊配件</option>
+                            <option value="網路設備">🌐 網路設備</option>
+                            <option value="手機">📱 手機</option>
+                            <option value="ALL">🔍 查看全品線大宗掃貨排行</option>
+                        </select>
+                    </div>
+                    <div class="col-md-8">
+                        <div class="p-3 bg-light rounded text-secondary" style="font-size: 0.9rem;">
+                            💡 <strong>營運思維：</strong>自動依據<strong>銷售數量從大到小排序</strong>，快速找出大宗掃貨客戶。
+                        </div>
+                    </div>
+                </div>
+            </div>
             <div class="card p-4">
-                <table class="table table-hover align-middle">
-                    <thead>
-                        <tr>
-                            <th>商品大類/群組名稱</th>
-                            <th>總銷售數量</th>
-                            <th>累計營業額</th>
-                            <th>產品線總利潤</th>
-                            <th>獲利貢獻權重</th>
-                        </tr>
-                    </thead>
-                    <tbody id="productLineTableBody"></tbody>
-                </table>
+                <h5 class="fw-bold mb-3 text-primary" id="productLineTitle">產品線銷貨明細</h5>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle" id="productLineTable">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>傳票編號</th>
+                                <th>處理日期</th>
+                                <th>群組名稱</th>
+                                <th>商品名稱</th>
+                                <th>單價</th>
+                                <th>數量</th>
+                                <th>小計金額</th>
+                                <th>購買顧客</th>
+                                <th>經手業務</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
             </div>
         </div>
 
         <div id="cross-selling" class="section-panel">
-            <h2 class="mb-4 fw-bold text-dark">🎯 交叉銷售 (Cross-Selling) 組合關聯推薦引擎</h2>
-            <div class="card p-4">
-                <div class="row align-items-center mb-4">
+            <h2 class="mb-4 fw-bold text-dark">🤝 熱門組合商品交叉銷售分析 (Cross-Selling)</h2>
+            <div class="card p-4 mb-4">
+                <div class="row align-items-center">
                     <div class="col-md-5">
-                        <label class="form-label fw-bold">選擇基準商品，分析買這件商品的人還買了什麼：</label>
-                        <select class="form-select" id="targetProductSelect" onchange="loadCrossSellingAnalysis()">
-                            <option value="P01">P01 - 聯想商務筆電</option>
-                            <option value="P02">P02 - 華碩電競筆電</option>
-                            <option value="P03">P03 - 蘋果 iPhone</option>
-                            <option value="P04">P04 - 三星智慧手機</option>
-                            <option value="P05">P05 - 宏碁辨公桌機</option>
-                            <option value="P06">P06 - 羅技無線滑鼠</option>
-                            <option value="P07">P07 - 雷蛇機械鍵盤</option>
-                            <option value="P08">P08 - 戴爾 27吋螢幕</option>
-                            <option value="P09">P09 - HP 雷射印表機</option>
-                            <option value="P10">P10 - 威剛 1TB 外接硬碟</option>
-                        </select>
+                        <label class="form-label fw-bold">請輸入基準商品 ID：</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-secondary text-white">商品 ID</span>
+                            <input type="number" class="form-control" id="targetProductIdInput" value="1">
+                            <button class="btn btn-primary" onclick="loadCrossSellingAnalysis()">啟動關聯分析</button>
+                        </div>
+                    </div>
+                    <div class="col-md-7">
+                        <div class="p-3 bg-light rounded text-secondary" style="font-size: 0.9rem;">
+                            💡 <strong>交叉銷售演算法：</strong>系統會自動搜尋出買過該基準商品的所有客群，並統計這些人還買了哪些其他商品。
+                        </div>
                     </div>
                 </div>
-                <table class="table table-hover align-middle">
-                    <thead>
-                        <tr>
-                            <th>推薦加購商品ID</th>
-                            <th>商品名稱</th>
-                            <th>所屬分類</th>
-                            <th>販賣單價</th>
-                            <th class="text-primary">共同購買訂單數 (關聯度高)</th>
-                            <th>累計加購總數量</th>
-                        </tr>
-                    </thead>
-                    <tbody id="crossSellingTableBody"></tbody>
-                </table>
+            </div>
+            <div class="card p-4">
+                <h5 class="fw-bold mb-3 text-success">📊 關聯商品推薦排行榜</h5>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle" id="crossSellingTable">
+                        <thead class="table-success">
+                            <tr>
+                                <th>推薦關聯商品名稱</th>
+                                <th>商品群組</th>
+                                <th>共同購買客戶數</th>
+                                <th>潛在加購累積總數量</th>
+                                <th>交叉銷售貢獻總金額</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
             </div>
         </div>
 
         <div id="crm" class="section-panel">
-            <h2 class="mb-4 fw-bold text-dark">👥 CRM 客戶動態價值標籤與健康度監控</h2>
-            <div class="card p-4">
-                <table class="table table-hover align-middle">
-                    <thead>
-                        <tr>
-                            <th>客戶姓名</th>
-                            <th>聯絡電話</th>
-                            <th>累計消費次數</th>
-                            <th>總採購金額</th>
-                            <th>最近一次消費日</th>
-                            <th>動態客群標籤</th>
-                            <th>流失風險健康度</th>
-                        </tr>
-                    </thead>
-                    <tbody id="crmTableBody"></tbody>
-                </table>
+            <h2 class="mb-4 fw-bold text-dark">🎯 CRM 精準行銷模組</h2>
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card p-4">
+                        <h5 class="card-title fw-bold text-danger">⚠️ 零消費沉睡會員名單</h5>
+                        <div class="table-responsive">
+                            <table class="table table-striped" id="sleepingTable">
+                                <thead class="table-danger"><tr><th>顧客ID</th><th>顧客名稱</th><th>聯絡電話</th></tr></thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card p-4">
+                        <h5 class="card-title fw-bold text-warning">📦 倉庫地縛靈：從未被購買的滯銷商品</h5>
+                        <div class="table-responsive">
+                            <table class="table table-striped" id="deadProductsTable">
+                                <thead class="table-warning"><tr><th>商品ID</th><th>商品名稱</th><th>群組分類</th></tr></thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="card p-4 mt-3">
+                <h5 class="card-title fw-bold text-primary">👣 全體客戶消費足跡追蹤表</h5>
+                <div class="table-responsive">
+                    <table class="table table-hover" id="footprintTable">
+                        <thead class="table-primary"><tr><th>顧客ID</th><th>顧客名稱</th><th>聯絡電話</th><th>曾購傳票</th><th>消費處理日期</th><th>單筆數量</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
             </div>
         </div>
 
         <div id="sales-kpi" class="section-panel">
-            <h2 class="mb-4 fw-bold text-dark">🎖️ 業務負責人績效考評與商品偏好地圖</h2>
-            
-            <div id="staffDebugErrorAlert" class="alert alert-danger d-none" role="alert"></div>
-
-            <div class="row">
-                <div class="col-md-3">
-                    <div class="card p-3 shadow-sm">
-                        <label class="form-label fw-bold text-primary">👤 選擇業務負責人：</label>
+            <h2 class="mb-4 fw-bold text-dark">🎖️ 負責人績效考核與偏好追蹤</h2>
+            <div class="card p-4 mb-4">
+                <div class="row align-items-center">
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold text-primary">請選擇要考核的業務負責人：</label>
                         <select class="form-select fw-bold" id="staffSelect" onchange="loadStaffPerformance()">
-                            <option value="">-- 讀取業務名冊中... --</option>
+                            <option value="">-- 請選擇負責人 --</option>
+                            <option value="張經理">張經理</option>
+                            <option value="李專員">李專員</option>
+                            <option value="王助理">王助理</option>
                         </select>
                     </div>
-                    
-                    <div class="card p-3 shadow-sm mt-3">
-                        <h6 class="fw-bold text-secondary">📊 商品群組偏好排行</h6>
-                        <ul class="list-group" id="staffPreferenceList">
-                            <li class="list-group-item text-muted text-center">請先選擇負責人</li>
-                        </ul>
+                    <div class="col-md-8">
+                        <div id="staffKpiSummary" class="row text-center">
+                            <div class="col-12 py-2 text-muted">請從左側下拉選單選擇一位業務負責人。</div>
+                        </div>
                     </div>
                 </div>
-                <div class="col-md-9">
-                    <div class="card p-3 shadow-sm">
-                        <h5 class="fw-bold mb-3 text-dark">📋 經手全交易流水明細對帳表</h5>
-                        <table class="table table-sm table-striped align-middle fs-7">
-                            <thead>
-                                <tr>
-                                    <th>傳票編號</th>
-                                    <th>交易日期</th>
-                                    <th>購買顧客</th>
-                                    <th>商品名稱</th>
-                                    <th>販賣單價</th>
-                                    <th>數量</th>
-                                    <th>流水小計</th>
-                                </tr>
-                            </thead>
-                            <tbody id="staffSalesTableBody">
-                                <tr><td colspan="7" class="text-center text-muted py-4">請自左側選擇業務員以動態串接 PostgreSQL 資料</td></tr>
-                            </tbody>
-                        </table>
+            </div>
+
+            <div id="staffDebugErrorAlert" class="alert alert-danger d-none fw-bold" role="alert"></div>
+
+            <div class="row">
+                <div class="col-md-7">
+                    <div class="card p-4">
+                        <h5 class="fw-bold mb-3">📜 經手業績交易明細流水帳</h5>
+                        <div class="table-responsive">
+                            <table class="table table-hover text-nowrap" id="staffDetailTable">
+                                <thead class="table-dark">
+                                    <tr><th>傳票</th><th>日期</th><th>商品名稱</th><th>單價</th><th>數量</th><th>銷售小計</th><th>創造毛利</th><th>顧客</th></tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td colspan="8" class="text-center text-muted">尚無選擇負責人</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-5">
+                    <div class="card p-4">
+                        <h5 class="fw-bold mb-3 text-success">🎯 該業務的客戶採購偏好與預算地圖</h5>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-striped" id="staffPreferenceTable">
+                                <thead class="table-success">
+                                    <tr><th>顧客名稱</th><th>商品群組</th><th>累積數量</th><th>預算總額</th></tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td colspan="4" class="text-center text-muted">尚無選擇負責人</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
         <div id="raw-data" class="section-panel">
-            <h2 class="mb-4 fw-bold text-dark">🗄️ 核心原始資料表 (明細檢視器)</h2>
-            <div class="mb-3">
-                <button class="btn btn-outline-dark active" id="btn-raw-sales" onclick="loadRawData('sales')">📊 銷售明細表 (販賣資料)</button>
-                <button class="btn btn-outline-dark" id="btn-raw-products" onclick="loadRawData('products')">📦 商品 master 清單</button>
-                <button class="btn btn-outline-dark" id="btn-raw-customers" onclick="loadRawData('customers')">👥 顧客基本資料表</button>
+            <h2 class="mb-4 fw-bold text-dark">💾 系統核心原始資料檢視器</h2>
+            <div class="btn-group mb-3" role="group">
+                <button type="button" id="btn-raw-sales" class="btn btn-outline-dark active" onclick="loadRawData('sales')">📊 販賣交易檔 (串聯版)</button>
+                <button type="button" id="btn-raw-products" class="btn btn-outline-dark" onclick="loadRawData('products')">💻 商品主檔</button>
+                <button type="button" id="btn-raw-customers" class="btn btn-outline-dark" onclick="loadRawData('customers')">👥 顧客名冊主檔</button>
             </div>
-            <div class="card p-3 table-responsive" style="max-height: 600px;">
-                <table class="table table-sm table-hover text-nowrap">
-                    <thead id="rawTableHeader"></tbody>
-                    <tbody id="rawTableBody"></tbody>
-                </table>
+            <div class="card p-4">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover align-middle">
+                        <thead id="rawTableHeader" class="table-dark"></tbody>
+                        <tbody id="rawTableBody"></tbody>
+                    </table>
+                </div>
             </div>
         </div>
 
     </div>
 
     <script>
-        let trendChartObj = null;
-        let pieChartObj = null;
+        let chartProductsInstance = null;
+        let chartCustomersInstance = null;
+        let chartSalesRankingInstance = null;
 
         function switchSection(sectionId) {
             document.querySelectorAll('.section-panel').forEach(el => el.classList.remove('active'));
@@ -236,231 +303,229 @@
             if (sectionId === 'cross-selling') loadCrossSellingAnalysis();
             if (sectionId === 'crm') loadCRMData();
             if (sectionId === 'sales-kpi') {
+                // 切換過來時，如果還沒選人，重置診斷提示
                 document.getElementById('staffDebugErrorAlert').classList.add('d-none');
-                // 🎯 修改點：每次切換至該分頁時，自動去撈取真正的資料庫名冊
-                initStaffDropdown();
             }
             if (sectionId === 'raw-data') loadRawData('sales');
         }
 
-        // 🎯 新增點：自動對接資料庫真正人名的動態選單功能
-        function initStaffDropdown() {
-            const staffSelect = document.getElementById('staffSelect');
-            
-            // 如果已經讀取成功過人名（長度大於 2），則不需要重製，避免影響使用者正在查看的選項
-            if (staffSelect.options.length > 2) return;
-
-            fetch('/api/get-all-staffs')
+        function loadDashboard() {
+            fetch('/api/dashboard-stats')
                 .then(res => res.json())
                 .then(data => {
-                    if (data.error) {
-                        staffSelect.innerHTML = `<option value="">❌ 載入失敗: ${data.error}</option>`;
-                        return;
-                    }
-                    
-                    let html = '<option value="">-- 請選擇負責人 --</option>';
-                    data.forEach(staff => {
-                        const name = staff.負責人姓名;
-                        html += `<option value="${name}">${name}</option>`;
-                    });
-                    staffSelect.innerHTML = html;
-                })
-                .catch(err => {
-                    console.error("無法動態載入負責人選單:", err);
-                    staffSelect.innerHTML = '<option value="">❌ 網路或 API 異常</option>';
-                });
-        }
-
-        function loadDashboard() {
-            fetch('/api/dashboard').then(res => res.json()).then(data => {
-                document.getElementById('m-revenue').innerText = '$' + Math.round(data.total_revenue).toLocaleString();
-                document.getElementById('m-orders').innerText = data.total_orders + ' 筆';
-                document.getElementById('m-qty').innerText = data.total_qty + ' 件';
-                document.getElementById('m-customers').innerText = data.total_customers + ' 戶';
-
-                const trendLabels = data.sales_trend.map(i => i.date);
-                const trendValues = data.sales_trend.map(i => i.value);
-                if(trendChartObj) trendChartObj.destroy();
-                trendChartObj = new Chart(document.getElementById('trendChart'), {
-                    type: 'line',
-                    data: { labels: trendLabels, datasets: [{ label: '單日銷售營業額', data: trendValues, borderColor: '#0d6efd', tension: 0.2, fill: true, backgroundColor: 'rgba(13,110,253,0.05)' }] }
-                });
-
-                const pieLabels = data.top_products.map(i => i.label);
-                const pieValues = data.top_products.map(i => i.value);
-                if(pieChartObj) pieChartObj.destroy();
-                pieChartObj = new Chart(document.getElementById('pieChart'), {
-                    type: 'doughnut',
-                    data: { labels: pieLabels, datasets: [{ data: pieValues, backgroundColor: ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b'] }] }
-                });
-            });
-        }
-
-        function loadProductLineAnalysis() {
-            fetch('/api/product-line-analysis').then(res => res.json()).then(data => {
-                const tbody = document.getElementById('productLineTableBody');
-                tbody.innerHTML = '';
-                
-                let sumRevenue = data.reduce((acc, current) => acc + parseFloat(current.總營業額 || 0), 0);
-
-                data.forEach(row => {
-                    let rev = parseFloat(row.總營業額 || 0);
-                    let weight = sumRevenue > 0 ? ((rev / sumRevenue) * 100).toFixed(1) + '%' : '0%';
-                    
-                    tbody.innerHTML += `
-                        <tr>
-                            <td class="fw-bold text-dark">${row.群組名稱}</td>
-                            <td><span class="badge bg-secondary">${parseInt(row.總銷售數量).toLocaleString()} 件</span></td>
-                            <td class="fw-bold">$${Math.round(rev).toLocaleString()}</td>
-                            <td class="text-success fw-bold">$${Math.round(row.總利潤總計 || 0).toLocaleString()}</td>
-                            <td>
-                                <div class="progress" style="height: 18px;">
-                                    <div class="progress-bar bg-info" role="progressbar" style="width: ${weight};" aria-valuenow="10" aria-valuemin="0" aria-valuemax="100">${weight}</div>
-                                </div>
-                            </td>
-                        </tr>
+                    if (data.error) return alert("讀取數據失敗: " + data.error);
+                    const kpi = data.kpi;
+                    document.getElementById('kpi-container').innerHTML = `
+                        <div class="col-md-3"><div class="card p-4 kpi-card"><h6>💰 營運累積總銷售額</h6><h3>$${Math.round(kpi.total_sales).toLocaleString()}</h3></div></div>
+                        <div class="col-md-3"><div class="card p-4 kpi-card-2"><h6>📈 實質創造總毛利</h6><h3>$${Math.round(kpi.total_profit).toLocaleString()}</h3></div></div>
+                        <div class="col-md-2"><div class="card p-4 bg-dark text-white"><h6>🎯 平均毛利率</h6><h3>${kpi.margin_rate}%</h3></div></div>
+                        <div class="col-md-2"><div class="card p-4 kpi-card-3"><h6>📦 累計出貨總件數</h6><h3>${Number(kpi.total_qty).toLocaleString()} 件</h3></div></div>
+                        <div class="col-md-2"><div class="card p-4 bg-white border"><h6>🛒 傳票平均客單價</h6><h3>$${Math.round(kpi.avg_order_value).toLocaleString()}</h3></div></div>
                     `;
-                });
-            });
-        }
 
-        function loadCrossSellingAnalysis() {
-            const pid = document.getElementById('targetProductSelect').value;
-            fetch(`/api/cross-selling-analysis?target_product_id=${pid}`).then(res => res.json()).then(data => {
-                const tbody = document.getElementById('crossSellingTableBody');
-                tbody.innerHTML = '';
-                if(data.error){
-                    tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger">${data.error}</td></tr>`;
-                    return;
-                }
-                if(data.length === 0){
-                    tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">查無足夠的共同購買樣本資料</td></tr>`;
-                    return;
-                }
-                data.forEach(row => {
-                    tbody.innerHTML += `
-                        <tr>
-                            <td><span class="badge bg-light text-dark border">${row.商品ID}</span></td>
-                            <td class="fw-bold text-dark">${row.商品名稱}</td>
-                            <td>${row.群組名稱}</td>
-                            <td>$${Math.round(row.販賣單價).toLocaleString()}</td>
-                            <td class="text-primary fw-bold">🔥 ${row.同時購買訂單數} 筆訂單</td>
-                            <td>${row.累計加購總數量} 件</td>
-                        </tr>
-                    `;
-                });
-            });
-        }
-
-        function loadCRMData() {
-            fetch('/api/crm-analysis').then(res => res.json()).then(data => {
-                const tbody = document.getElementById('crmTableBody');
-                tbody.innerHTML = '';
-                
-                data.forEach(row => {
-                    let totalAmt = parseFloat(row.總消費金額 || 0);
-                    let tagHtml = '';
-                    let riskHtml = '';
-
-                    if (totalAmt >= 500000) {
-                        tagHtml = '<span class="badge bg-danger">💎 核心 VIP 老大</span>';
-                    } else if (totalAmt >= 150000) {
-                        tagHtml = '<span class="badge bg-warning text-dark">⭐ 高價值主力客</span>';
-                    } else if (totalAmt > 0) {
-                        tagHtml = '<span class="badge bg-primary">📈 一般型常客</span>';
-                    } else {
-                        tagHtml = '<span class="badge bg-light text-muted">⚪ 尚未破冰新客</span>';
-                    }
-
-                    if (!row.最後消費日期) {
-                        riskHtml = '<span class="text-muted">未知</span>';
-                    } else {
-                        let lastDate = new Date(row.最後消費日期);
-                        let cutoffDate = new Date("2024-10-01");
-                        if (lastDate < cutoffDate) {
-                            riskHtml = '<span class="text-danger fw-bold">🚨 嚴重流失 (未購大於1.5年)</span>';
-                        } else {
-                            riskHtml = '<span class="text-success fw-bold">🟢 正常常態互動</span>';
+                    if (chartProductsInstance) chartProductsInstance.destroy();
+                    chartProductsInstance = new Chart(document.getElementById('chartProducts').getContext('2d'), {
+                        type: 'bar',
+                        data: {
+                            labels: data.top_products.map(p => p.商品名稱),
+                            datasets: [{ label: '創造毛利總額 ($)', data: data.top_products.map(p => p.總創造毛利), backgroundColor: '#4e73df', borderRadius: 5 }]
                         }
-                    }
+                    });
 
-                    tbody.innerHTML += `
-                        <tr>
-                            <td class="fw-bold">${row.顧客名稱}</td>
-                            <td>${row.聯絡電話 || '-'}</td>
-                            <td>${row.總消費次數 || 0} 次</td>
-                            <td class="fw-bold text-navy">$${Math.round(totalAmt).toLocaleString()}</td>
-                            <td>${row.最後消費日期 || '-'}</td>
-                            <td>${tagHtml}</td>
-                            <td>${riskHtml}</td>
-                        </tr>
-                    `;
+                    if (chartCustomersInstance) chartCustomersInstance.destroy();
+                    chartCustomersInstance = new Chart(document.getElementById('chartCustomers').getContext('2d'), {
+                        type: 'pie',
+                        data: {
+                            labels: data.top_customers.map(c => c.顧客名稱),
+                            datasets: [{ data: data.top_customers.map(c => c.總金額), backgroundColor: ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b'] }]
+                        }
+                    });
+                    loadSalesRanking();
+                });
+        }
+
+        function loadSalesRanking() {
+            fetch('/api/sales-ranking').then(res => res.json()).then(rankingData => {
+                if (chartSalesRankingInstance) chartSalesRankingInstance.destroy();
+                chartSalesRankingInstance = new Chart(document.getElementById('chartSalesRanking').getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: rankingData.map(r => r.業務員),
+                        datasets: [{ label: '累積銷售額 ($)', data: rankingData.map(r => r.總銷售業績), backgroundColor: '#1cc88a', borderRadius: 5 }]
+                    },
+                    options: { indexAxis: 'y' }
+                });
+
+                const tbody = document.querySelector('#salesRankingTable tbody');
+                tbody.innerHTML = '';
+                rankingData.forEach((row, index) => {
+                    let medal = index + 1;
+                    if (index === 0) medal = '🥇';
+                    if (index === 1) medal = '🥈';
+                    if (index === 2) medal = '🥉';
+                    tbody.innerHTML += `<tr><td class="text-center fw-bold">${medal}</td><td class="fw-bold">${row.業務員}</td><td class="text-center">${row.經手訂單數}</td><td class="text-primary fw-bold">$${Math.round(row.總銷售業績).toLocaleString()}</td><td class="text-success fw-bold">$${Math.round(row.創造總毛利).toLocaleString()}</td></tr>`;
                 });
             });
         }
 
+        // ==========================================
+        // 🔥 負責人績效考核與偏好追蹤 前端核心除錯模組
+        // ==========================================
         function loadStaffPerformance() {
             const staffName = document.getElementById('staffSelect').value;
-            const tableBody = document.getElementById('staffSalesTableBody');
-            const prefList = document.getElementById('staffPreferenceList');
-            const errAlert = document.getElementById('staffDebugErrorAlert');
+            const debugAlert = document.getElementById('staffDebugErrorAlert');
             
-            errAlert.classList.add('d-none');
-
+            // 如果選回預設未選擇
             if (!staffName) {
-                tableBody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">請自左側選擇業務員以動態串接 PostgreSQL 資料</td></tr>';
-                prefList.innerHTML = '<li class="list-group-item text-muted text-center">請先選擇負責人</li>';
+                document.getElementById('staffKpiSummary').innerHTML = `<div class="col-12 py-2 text-muted">請從左側下拉選單選擇一位業務負責人。</div>`;
+                document.querySelector('#staffDetailTable tbody').innerHTML = `<tr><td colspan="8" class="text-center text-muted">尚無選擇負責人</td></tr>`;
+                document.querySelector('#staffPreferenceTable tbody').innerHTML = `<tr><td colspan="4" class="text-center text-muted">尚無選擇負責人</td></tr>`;
+                debugAlert.classList.add('d-none');
                 return;
             }
 
-            tableBody.innerHTML = '<tr><td colspan="7" class="text-center text-secondary py-4"><div class="spinner-border spinner-border-sm text-primary me-2"></div>正在即時極速演算數據中...</td></tr>';
+            debugAlert.classList.add('d-none'); // 先重置隱藏
 
+            // 1. 抓取明細與總計
             fetch(`/api/sales-detail-by-staff?staff_name=${encodeURIComponent(staffName)}`)
-                .then(res => res.json())
+                .then(res => {
+                    if (!res.ok) {
+                        return res.json().then(errData => { throw new Error(errData.error || `HTTP 錯誤代碼 ${res.status}`); });
+                    }
+                    return res.json();
+                })
                 .then(data => {
+                    console.log("Staff Details Response:", data);
+                    
+                    // 防錯：萬一後端回傳有錯誤標籤
                     if (data.error) {
-                        errAlert.innerText = `後端 SQL 執行錯誤回報：${data.error}`;
-                        errAlert.classList.remove('d-none');
-                        tableBody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">讀取失敗</td></tr>';
-                        return;
+                        throw new Error(data.error);
                     }
 
-                    const sales = data.sales_detail || [];
-                    if (sales.length === 0) {
-                        tableBody.innerHTML = '<tr><td colspan="7" class="text-center text-warning py-4">⚠️ 資料庫中查無此人任何銷售實績明細</td></tr>';
+                    const summary = data.summary || { total_sales: 0, total_profit: 0 };
+                    document.getElementById('staffKpiSummary').innerHTML = `
+                        <div class="col-6"><div class="bg-primary text-white p-3 rounded"><h6>經手累積總銷售業績</h6><h4>$${Math.round(summary.total_sales).toLocaleString()}</h4></div></div>
+                        <div class="col-6"><div class="bg-success text-white p-3 rounded"><h6>為公司實質創造總毛利</h6><h4>$${Math.round(summary.total_profit).toLocaleString()}</h4></div></div>
+                    `;
+
+                    const detailBody = document.querySelector('#staffDetailTable tbody');
+                    if (!data.sales_detail || data.sales_detail.length === 0) {
+                        detailBody.innerHTML = `<tr><td colspan="8" class="text-center text-warning fw-bold">⚠ 資料庫查無【${staffName}】的任何銷售明細。請確認資料主檔中是否有此負責人的成交紀錄！</td></tr>`;
                     } else {
-                        tableBody.innerHTML = sales.map(r => `
+                        detailBody.innerHTML = data.sales_detail.map(row => `
                             <tr>
-                                <td><span class="badge bg-light text-dark border">${r.傳票編號}</span></td>
-                                <td>${r.處理日 || '-'}</td>
-                                <td class="fw-bold text-secondary">${r.顧客名稱 || '散客'}</td>
-                                <td class="fw-bold text-dark">${r.商品名稱}</td>
-                                <td>$${Math.round(r.販賣單價).toLocaleString()}</td>
-                                <td><span class="badge bg-dark">${r.數量}</span></td>
-                                <td class="fw-bold text-primary">$${Math.round(r.流水小計).toLocaleString()}</td>
+                                <td><span class="badge bg-secondary">${row["傳票編號"] || '-'}</span></td>
+                                <td>${row["交易日期"] || '-'}</td>
+                                <td class="fw-bold">${row["商品名稱"] || '-'}</td>
+                                <td>$${Number(row["販賣單價"] || 0).toLocaleString()}</td>
+                                <td>${row["數量"] || 0}</td>
+                                <td class="fw-bold text-primary">$${Math.round(row["銷售小計"] || 0).toLocaleString()}</td>
+                                <td class="text-success fw-bold">$${Math.round(row["創造毛利小計"] || 0).toLocaleString()}</td>
+                                <td><span class="badge bg-info text-dark">${row["顧客名稱"] || '-'}</span></td>
                             </tr>
-                        `).join('');
-                    }
-
-                    const pref = data.preference || [];
-                    if (pref.length === 0) {
-                        prefList.innerHTML = '<li class="list-group-item text-muted text-center">無類別佔比偏好偏向</li>';
-                    } else {
-                        prefList.innerHTML = pref.map((p, idx) => `
-                            <li class="list-group-item d-flex justify-content-between align-items-center fs-7 py-2">
-                                <div>
-                                    <span class="fw-bold">${idx+1}. ${p.群組名稱}</span>
-                                    <br><small class="text-muted">量: ${parseInt(p.總銷售數量).toLocaleString()}件</small>
-                                </div>
-                                <span class="badge bg-success rounded-pill">$${Math.round(p.總銷售金額).toLocaleString()}</span>
-                            </li>
                         `).join('');
                     }
                 })
                 .catch(err => {
-                    console.error("Staff KPI API Error:", err);
-                    tableBody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">無法連線至 API 伺服器進行績效統計</td></tr>';
+                    console.error("Staff Detail API 噴錯:", err);
+                    debugAlert.classList.remove('d-none');
+                    debugAlert.innerHTML = `❌ 明細模組讀取失敗！錯誤回報：<br>${err.message}`;
                 });
+
+            // 2. 抓取客戶採購偏好
+            fetch(`/api/customer-preference-by-staff?staff_name=${encodeURIComponent(staffName)}`)
+                .then(res => {
+                    if (!res.ok) throw new Error(`HTTP 錯誤 ${res.status}`);
+                    return res.json();
+                })
+                .then(data => {
+                    console.log("Staff Preference Response:", data);
+                    const prefBody = document.querySelector('#staffPreferenceTable tbody');
+                    
+                    if (data.error) {
+                        prefBody.innerHTML = `<tr><td colspan="4" class="text-danger fw-bold">${data.error}</td></tr>`;
+                        return;
+                    }
+
+                    if (!data || data.length === 0) {
+                        prefBody.innerHTML = `<tr><td colspan="4" class="text-center text-muted">暫無客戶偏好地圖數據</td></tr>`;
+                    } else {
+                        prefBody.innerHTML = data.map(row => `
+                            <tr>
+                                <td class="fw-bold">${row["顧客名稱"] || '-'}</td>
+                                <td><span class="badge badge-group">${row["群組名稱"] || '-'}</span></td>
+                                <td>${row["累積購買數量"] || 0} 件</td>
+                                <td class="text-success fw-bold">$${Math.round(row["貢獻預算總額"] || 0).toLocaleString()}</td>
+                            </tr>
+                        `).join('');
+                    }
+                })
+                .catch(err => {
+                    console.error("Staff Preference API 噴錯:", err);
+                    debugAlert.classList.remove('d-none');
+                    debugAlert.innerHTML += `<br><br>❌ 偏好模型讀取失敗！錯誤回報：<br>${err.message}`;
+                });
+        }
+
+        // --- 其他既有功能的 JS 保持正常運作 ---
+        function loadProductLineAnalysis() {
+            const groupName = document.getElementById('groupSelect').value;
+            document.getElementById('productLineTitle').innerText = `📊 【${groupName}】產品線銷貨營運明細`;
+            fetch(`/api/sales-by-group?group_name=${encodeURIComponent(groupName)}`)
+                .then(res => res.json())
+                .then(data => {
+                    const tbody = document.querySelector('#productLineTable tbody');
+                    tbody.innerHTML = data.map(row => `
+                        <tr>
+                            <td><span class="badge bg-secondary">${row.傳票編號}</span></td>
+                            <td>${row.處理日期}</td>
+                            <td><span class="badge badge-group">${row.群組名稱}</span></td>
+                            <td class="fw-bold">${row.商品名稱}</td>
+                            <td>$${Number(row.販賣單價).toLocaleString()}</td>
+                            <td class="fw-bold text-primary">${row.購買數量}</td>
+                            <td class="fw-bold">$${Number(row.銷售小計金額).toLocaleString()}</td>
+                            <td><span class="badge bg-info text-dark">${row.顧客名稱}</span></td>
+                            <td>${row.經手業務}</td>
+                        </tr>
+                    `).join('');
+                });
+        }
+
+        function loadCrossSellingAnalysis() {
+            const targetId = document.getElementById('targetProductIdInput').value;
+            fetch(`/api/cross-selling-analysis?target_product_id=${targetId}`)
+                .then(res => res.json())
+                .then(data => {
+                    const tbody = document.querySelector('#crossSellingTable tbody');
+                    if(data.length===0) { tbody.innerHTML='<tr><td colspan="5" class="text-center">暫無數據</td></tr>'; return;}
+                    tbody.innerHTML = data.map(row => `
+                        <tr>
+                            <td class="fw-bold">🎁 加購推薦：${row.商品名稱}</td>
+                            <td><span class="badge badge-group">${row.群組名稱}</span></td>
+                            <td class="text-center fw-bold text-danger">${row.購買客戶數} 人共同購買</td>
+                            <td class="text-center">${row.累積購買總數量} 件</td>
+                            <td class="fw-bold text-success">$${Number(row.交叉貢獻總金額).toLocaleString()}</td>
+                        </tr>
+                    `).join('');
+                });
+        }
+
+        function loadCRMData() {
+            fetch('/api/sleeping-members').then(res=>res.json()).then(data=>{
+                document.getElementById('sleepingTable').querySelector('tbody').innerHTML = data.map(r=>`<tr><td>${r.顧客id}</td><td class="fw-bold">${r.顧客名稱}</td><td>${r.聯絡電話||'無'}</td></tr>`).join('');
+            });
+            fetch('/api/dead-products').then(res=>res.json()).then(data=>{
+                document.getElementById('deadProductsTable').querySelector('tbody').innerHTML = data.map(r=>`<tr><td>${r.商品id}</td><td class="fw-bold text-danger">${r.商品名稱}</td><td><span class="badge bg-secondary">${r.群組名稱}</span></td></tr>`).join('');
+            });
+            fetch('/api/customer-footprint').then(res=>res.json()).then(data=>{
+                document.getElementById('footprintTable').querySelector('tbody').innerHTML = data.map(r=>`
+                    <tr>
+                        <td>${r.顧客id}</td><td class="fw-bold">${r.顧客名稱}</td><td>${r.聯絡電話||'-'}</td>
+                        <td>${r.傳票編號 ? `<span class="badge bg-primary">${r.傳票編號}</span>` : '<span class="badge bg-danger">無消費紀錄</span>'}</td>
+                        <td>${r.處理日期||'-'}</td><td>${r.購買數量||0}</td>
+                    </tr>
+                `).join('');
+            });
         }
 
         function loadRawData(type) {
