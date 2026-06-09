@@ -9,7 +9,7 @@
     <style>
         body { background-color: #f8f9fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         .sidebar { height: 100vh; position: fixed; top: 0; left: 0; width: 240px; background-color: #212529; padding-top: 20px; z-index: 1000; }
-        .sidebar .nav-link { color: #adb5bd; padding: 12px 20px; font-weight: 500; display: flex; align-items: center; }
+        .sidebar .nav-link { color: #adb5bd; padding: 12px 20px; font-weight: 500; display: flex; align-items: center; text-decoration: none; }
         .sidebar .nav-link:hover, .sidebar .nav-link.active { color: #fff; background-color: #0d6efd; }
         .main-content { margin-left: 240px; padding: 30px; }
         .card { border: none; box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.05); border-radius: 10px; margin-bottom: 25px; }
@@ -27,15 +27,15 @@
     <div class="sidebar">
         <div class="px-3 mb-4 text-center">
             <h5 class="text-white fw-bold">3C 營運戰情室</h5>
-            <span class="badge bg-primary">v2.5 (前後端分離版)</span>
+            <span class="badge bg-primary">v2.5 (完整對接分離版)</span>
         </div>
         <nav class="nav flex-column">
-            <a class="nav-link active" href="#" onclick="switchSection('dashboard')">📊 營運總覽儀表板</a>
-            <a class="nav-link" href="#" onclick="switchSection('product-line')">📦 產品線銷貨營運</a>
-            <a class="nav-link" href="#" onclick="switchSection('cross-selling')">🤝 組合商品交叉銷售</a>
-            <a class="nav-link" href="#" onclick="switchSection('crm')">🎯 CRM 精準行銷模組</a>
-            <a class="nav-link" href="#" onclick="switchSection('sales-kpi')">🎖️ 業務績效考核考核</a>
-            <a class="nav-link" href="#" onclick="switchSection('raw-data')">💾 系統核心原始資料</a>
+            <a class="nav-link active" href="#" id="link-dashboard" onclick="switchSection('dashboard')">📊 營運總覽儀表板</a>
+            <a class="nav-link" href="#" id="link-product-line" onclick="switchSection('product-line')">📦 產品線銷貨營運</a>
+            <a class="nav-link" href="#" id="link-cross-selling" onclick="switchSection('cross-selling')">🤝 組合商品交叉銷售</a>
+            <a class="nav-link" href="#" id="link-crm" onclick="switchSection('crm')">🎯 CRM 精準行銷模組</a>
+            <a class="nav-link" href="#" id="link-sales-kpi" onclick="switchSection('sales-kpi')">🎖️ 業務績效考核考核</a>
+            <a class="nav-link" href="#" id="link-raw-data" onclick="switchSection('raw-data')">💾 系統核心原始資料</a>
         </nav>
     </div>
 
@@ -44,7 +44,8 @@
         <div id="dashboard" class="section-panel active">
             <h2 class="mb-4 fw-bold text-dark">📊 營運總覽儀表板</h2>
             <div class="row" id="kpi-container">
-                </div>
+                <div class="col-12 text-center py-3 text-muted">讀取儀表板 KPI 中...</div>
+            </div>
             <div class="row">
                 <div class="col-md-6">
                     <div class="card p-4">
@@ -76,7 +77,7 @@
                         </select>
                     </div>
                     <div class="col-md-8">
-                        <div class="p-3 bg-light rounded text-secondary style="font-size: 0.9rem;">
+                        <div class="p-3 bg-light rounded text-secondary" style="font-size: 0.9rem;">
                             💡 <strong>營運思維：</strong>本功能可獨立篩選單一產品線，並自動依據<strong>銷售數量從大到小排序</strong>，協助決策者快速揪出大宗掃貨客戶，制定針對性的批量折扣。
                         </div>
                     </div>
@@ -183,7 +184,7 @@
         </div>
 
         <div id="sales-kpi" class="section-panel">
-            <h2 class="mb-4 fw-bold text-dark">🎖️ 業務負責人績效考核與偏好追蹤</h2>
+            <h2 class="mb-4 fw-bold text-dark">🎖 Rose 負責人績效考核與偏好追蹤</h2>
             <div class="card p-4 mb-4 shadow-sm">
                 <div class="row align-items-center">
                     <div class="col-md-4">
@@ -233,16 +234,18 @@
 
         <div id="raw-data" class="section-panel">
             <h2 class="mb-4 fw-bold text-dark">💾 系統核心原始資料檢視器</h2>
-            <ul class="nav nav-tabs mb-3" id="rawTabs">
-                <li class="nav-item"><a class="nav-link active" href="#" onclick="switchRawTab('sales')">販賣交易檔 (串聯版)</a></li>
-                <li class="nav-item"><a class="nav-link" href="#" onclick="switchRawTab('products')">商品主檔</a></li>
-                <li class="nav-item"><a class="nav-link" href="#" onclick="switchRawTab('customers')">顧客名冊主檔</a></li>
-            </ul>
+            <div class="btn-group mb-3" role="group">
+                <button type="button" id="btn-raw-sales" class="btn btn-outline-dark active" onclick="loadRawData('sales')">📊 販賣交易檔 (串聯版)</button>
+                <button type="button" id="btn-raw-products" class="btn btn-outline-dark" onclick="loadRawData('products')">💻 商品主檔</button>
+                <button type="button" id="btn-raw-customers" class="btn btn-outline-dark" onclick="loadRawData('customers')">👥 顧客名冊主檔</button>
+            </div>
             <div class="card p-4">
                 <div class="table-responsive">
-                    <table class="table table-striped" id="rawDataTable">
-                        <thead id="rawTableHeader"></thead>
-                        <tbody id="rawTableBody"></tbody>
+                    <table class="table table-striped table-hover align-middle">
+                        <thead id="rawTableHeader" class="table-dark">
+                            </thead>
+                        <tbody id="rawTableBody">
+                            </tbody>
                     </table>
                 </div>
             </div>
@@ -251,55 +254,67 @@
     </div>
 
     <script>
-        // 切換主頁面
+        // 全域圖表變數控管（避免 Chart.js 重複渲染噴錯）
+        let chartProductsInstance = null;
+        let chartCustomersInstance = null;
+
+        // 切換主頁面面板
         function switchSection(sectionId) {
             document.querySelectorAll('.section-panel').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.sidebar .nav-link').forEach(el => el.classList.remove('active'));
-            document.getElementById(sectionId).classList.add('active');
-            event.currentTarget.classList.add('active');
             
-            // 觸發對應資料載入
+            document.getElementById(sectionId).classList.add('active');
+            document.getElementById(`link-${sectionId}`).classList.add('active');
+            
+            // 根據切換的目的地載入對應資料
             if (sectionId === 'dashboard') loadDashboard();
             if (sectionId === 'product-line') loadProductLineAnalysis();
             if (sectionId === 'cross-selling') loadCrossSellingAnalysis();
             if (sectionId === 'crm') loadCRMData();
             if (sectionId === 'sales-kpi') loadStaffPerformance();
-            if (sectionId === 'raw-data') switchRawTab('sales');
+            if (sectionId === 'raw-data') loadRawData('sales');
         }
 
-        // 1. 載入儀表板 KPI 與圖表
-        let chart1 = null, chart2 = null;
+        // 1. 載入儀表板 KPI 與 Chart.js 圖表
         function loadDashboard() {
             fetch('/api/dashboard-stats')
                 .then(res => res.json())
                 .then(data => {
+                    if (data.error) {
+                        alert("讀取儀表板失敗: " + data.error);
+                        return;
+                    }
                     const kpi = data.kpi;
+                    // 更新 KPI 數據卡片
                     document.getElementById('kpi-container').innerHTML = `
-                        <div class="col-md-3"><div class="card p-4 kpi-card"><h6>💰 營運累積總銷售額</h6><h3>$${Number(kpi.total_sales).toLocaleString()}</h3></div></div>
-                        <div class="col-md-3"><div class="card p-4 kpi-card-2"><h6>📈 實質創造總毛利</h6><h3>$${Number(kpi.total_profit).toLocaleString()}</h3></div></div>
+                        <div class="col-md-3"><div class="card p-4 kpi-card"><h6>💰 營運累積總銷售額</h6><h3>$${Math.round(kpi.total_sales).toLocaleString()}</h3></div></div>
+                        <div class="col-md-3"><div class="card p-4 kpi-card-2"><h6>📈 實質創造總毛利</h6><h3>$${Math.round(kpi.total_profit).toLocaleString()}</h3></div></div>
                         <div class="col-md-2"><div class="card p-4 bg-dark text-white"><h6>🎯 平均毛利率</h6><h3>${kpi.margin_rate}%</h3></div></div>
                         <div class="col-md-2"><div class="card p-4 kpi-card-3"><h6>📦 累計出貨總件數</h6><h3>${Number(kpi.total_qty).toLocaleString()} 件</h3></div></div>
-                        <div class="col-md-2"><div class="card p-4 bg-white"><h6>🛒 客單價 (每張傳票)</h6><h3>$${Math.round(kpi.avg_order_value).toLocaleString()}</h3></div></div>
+                        <div class="col-md-2"><div class="card p-4 bg-white border"><h6>🛒 傳票平均客單價</h6><h3>$${Math.round(kpi.avg_order_value).toLocaleString()}</h3></div></div>
                     `;
 
                     // 渲染明星商品毛利圖
-                    if(chart1) chart1.destroy();
-                    chart1 = new Chart(document.getElementById('chartProducts'), {
+                    if (chartProductsInstance) chartProductsInstance.destroy();
+                    const ctxProd = document.getElementById('chartProducts').getContext('2d');
+                    chartProductsInstance = new Chart(ctxProd, {
                         type: 'bar',
                         data: {
                             labels: data.top_products.map(p => p.商品名稱),
                             datasets: [{
-                                label: '創造毛利金額',
+                                label: '創造毛利總額 ($)',
                                 data: data.top_products.map(p => p.總創造毛利),
-                                backgroundColor: '#4e73df'
+                                backgroundColor: '#4e73df',
+                                borderRadius: 5
                             }]
                         },
-                        options: { responsive: true }
+                        options: { responsive: true, scales: { y: { beginAtZero: true } } }
                     });
 
-                    // 渲染顧客排行圖
-                    if(chart2) chart2.destroy();
-                    chart2 = new Chart(document.getElementById('chartCustomers'), {
+                    // 渲染顧客貢獻排行圓餅圖
+                    if (chartCustomersInstance) chartCustomersInstance.destroy();
+                    const ctxCust = document.getElementById('chartCustomers').getContext('2d');
+                    chartCustomersInstance = new Chart(ctxCust, {
                         type: 'pie',
                         data: {
                             labels: data.top_customers.map(c => c.顧客名稱),
@@ -307,21 +322,24 @@
                                 data: data.top_customers.map(c => c.總金額),
                                 backgroundColor: ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b']
                             }]
-                        }
+                        },
+                        options: { responsive: true }
                     });
-                });
+                }).catch(err => console.error("Dashboard Error:", err));
         }
 
         // 2. 特定產品線大宗出貨分析
         function loadProductLineAnalysis() {
             const groupName = document.getElementById('groupSelect').value;
             document.getElementById('productLineTitle').innerText = `📊 【${groupName}】產品線銷貨營運明細 (依訂購數量從大到小排序)`;
+            
             fetch(`/api/sales-by-group?group_name=${encodeURIComponent(groupName)}`)
                 .then(res => res.json())
                 .then(data => {
                     const tbody = document.querySelector('#productLineTable tbody');
                     tbody.innerHTML = '';
-                    if(data.error) { tbody.innerHTML = `<tr><td colspan="9" class="text-danger">${data.error}</td></tr>`; return; }
+                    if (data.error) { tbody.innerHTML = `<tr><td colspan="9" class="text-danger">${data.error}</td></tr>`; return; }
+                    
                     data.forEach(row => {
                         tbody.innerHTML += `
                             <tr>
@@ -348,8 +366,9 @@
                 .then(data => {
                     const tbody = document.querySelector('#crossSellingTable tbody');
                     tbody.innerHTML = '';
-                    if(data.error) { tbody.innerHTML = `<tr><td colspan="5" class="text-danger">${data.error}</td></tr>`; return; }
-                    if(data.length === 0) { tbody.innerHTML = `<tr><td colspan="5" class="text-muted text-center">查無共同購買關聯資料（該商品可能尚無人購買，或無交叉消費足跡）</td></tr>`; return; }
+                    if (data.error) { tbody.innerHTML = `<tr><td colspan="5" class="text-danger">${data.error}</td></tr>`; return; }
+                    if (data.length === 0) { tbody.innerHTML = `<tr><td colspan="5" class="text-muted text-center">查無關聯交集商品。</td></tr>`; return; }
+                    
                     data.forEach(row => {
                         tbody.innerHTML += `
                             <tr>
@@ -366,24 +385,33 @@
 
         // 4. CRM 精準行銷資料載入
         function loadCRMData() {
-            // 沉睡會員
+            // 零消費沉睡會員
             fetch('/api/sleeping-members').then(res=>res.json()).then(data=>{
                 const tbody = document.getElementById('sleepingTable').querySelector('tbody');
-                tbody.innerHTML = data.map(r=>`<tr><td>${r.顧客id}</td><td class="fw-bold">${r.顧客名稱}</td><td>${r.聯絡電話 || '無資料'}</td></tr>`).join('');
+                tbody.innerHTML = data.map(r=>`<tr><td>${r.顧客id}</td><td class="fw-bold">${r.顧客名稱}</td><td>${r.聯絡電話 || '無聯絡電話'}</td></tr>`).join('');
             });
             // 滯銷商品
             fetch('/api/dead-products').then(res=>res.json()).then(data=>{
                 const tbody = document.getElementById('deadProductsTable').querySelector('tbody');
                 tbody.innerHTML = data.map(r=>`<tr><td>${r.商品id}</td><td class="fw-bold text-danger">${r.商品名稱}</td><td><span class="badge bg-secondary">${r.群組名稱}</span></td></tr>`).join('');
             });
-            // 消費足跡
+            // 消費足跡表
             fetch('/api/customer-footprint').then(res=>res.json()).then(data=>{
                 const tbody = document.getElementById('footprintTable').querySelector('tbody');
-                tbody.innerHTML = data.map(r=>`<tr><td>${r.顧客id}</td><td class="fw-bold">${r.顧客名稱}</td><td>${r.聯絡電話||'-'}</td><td>${r.傳票編號?`<span class="badge bg-primary">${r.傳票編號}</span>` : '<span class="badge bg-danger">無消費紀錄</span>'}</td><td>${r.處理_期||r.處理日期||'-'}</td><td>${r.購買數量||0}</td></tr>`).join('');
+                tbody.innerHTML = data.map(r=>`
+                    <tr>
+                        <td>${r.顧客id}</td>
+                        <td class="fw-bold">${r.顧客名稱}</td>
+                        <td>${r.聯絡電話||'-'}</td>
+                        <td>${r.傳票編號 ? `<span class="badge bg-primary">${r.傳票編號}</span>` : '<span class="badge bg-danger">無消費紀錄</span>'}</td>
+                        <td>${r.處理日期||'-'}</td>
+                        <td>${r.購買數量||0}</td>
+                    </tr>
+                `).join('');
             });
         }
 
-        // 5. 業務績效考核考核載入
+        // 5. 業務績效考核考核與客戶偏好載入
         function loadStaffPerformance() {
             const staffName = document.getElementById('staffSelect').value;
             
@@ -391,10 +419,11 @@
             fetch(`/api/sales-detail-by-staff?staff_name=${encodeURIComponent(staffName)}`)
                 .then(res => res.json())
                 .then(data => {
+                    if (data.error) return alert(data.error);
                     const summary = data.summary;
                     document.getElementById('staffKpiSummary').innerHTML = `
-                        <div class="col-6"><div class="bg-primary text-white p-2 rounded"><h6>經手總業績</h6><h4>$${Number(summary.total_sales).toLocaleString()}</h4></div></div>
-                        <div class="col-6"><div class="bg-success text-white p-2 rounded"><h6>為公司創造總毛利</h6><h4>$${Number(summary.total_profit).toLocaleString()}</h4></div></div>
+                        <div class="col-6"><div class="bg-primary text-white p-3 rounded"><h6>經手累積總銷售業績</h6><h4>$${Math.round(summary.total_sales).toLocaleString()}</h4></div></div>
+                        <div class="col-6"><div class="bg-success text-white p-3 rounded"><h6>為公司實質創造總毛利</h6><h4>$${Math.round(summary.total_profit).toLocaleString()}</h4></div></div>
                     `;
                     
                     const tbodyDetail = document.querySelector('#staffDetailTable tbody');
@@ -428,10 +457,11 @@
                 });
         }
 
-        // 6. 核心原始資料 Tab 切換
-        function switchRawTab(type) {
-            document.querySelectorAll('#rawTabs .nav-link').forEach(el => el.classList.remove('active'));
-            event.currentTarget.classList.add('active');
+        // 6. 核心原始資料 Tab 切換與動態渲染 (解決漏撈與無法檢視問題)
+        function loadRawData(type) {
+            // 切換按鈕高亮狀態
+            document.querySelectorAll('#raw-data .btn-outline-dark').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`btn-raw-${type}`).classList.add('active');
             
             let url = '/api/sales';
             if(type === 'products') url = '/api/products';
@@ -440,32 +470,42 @@
             fetch(url).then(res => res.json()).then(data => {
                 const thead = document.getElementById('rawTableHeader');
                 const tbody = document.getElementById('rawTableBody');
-                thead.innerHTML = ''; tbody.innerHTML = '';
+                thead.innerHTML = ''; 
+                tbody.innerHTML = '';
                 
-                if(data.length === 0) return;
+                if(!data || data.length === 0) {
+                    tbody.innerHTML = '<tr><td class="text-center text-muted">暫無關聯資料</td></tr>';
+                    return;
+                }
                 
-                // 動態產生表頭
+                // 動態取得物件屬性名稱作為「表頭標題」
                 const headers = Object.keys(data[0]);
                 let headerHtml = '<tr>';
                 headers.forEach(h => headerHtml += `<th>${h}</th>`);
                 headerHtml += '</tr>';
                 thead.innerHTML = headerHtml;
 
-                // 動態產生表身
+                // 動態產生每一行「表身資料」
                 data.forEach(row => {
                     let rowHtml = '<tr>';
                     headers.forEach(h => {
                         let val = row[h];
-                        if(typeof val === 'number' && h.includes('價')) val = '$' + val.toLocaleString();
+                        // 如果是單價欄位，加上貨幣符號
+                        if(typeof val === 'number' && h.includes('價')) {
+                            val = '$' + Math.round(val).toLocaleString();
+                        }
                         rowHtml += `<td>${val !== null ? val : '-'}</td>`;
                     });
                     rowHtml += '</tr>';
                     tbody.innerHTML += rowHtml;
                 });
+            }).catch(err => {
+                console.error("Raw Data Load Error:", err);
+                document.getElementById('rawTableBody').innerHTML = `<tr><td class="text-center text-danger">讀取核心資料庫 API 發生異常錯誤</td></tr>`;
             });
         }
 
-        // 預設啟動載入儀表板
+        // 預設啟動載入：首頁儀表板
         window.onload = function() {
             loadDashboard();
         };
