@@ -217,10 +217,7 @@
                     <div class="col-md-4">
                         <label class="form-label fw-bold text-primary">請選擇要考核的業務負責人：</label>
                         <select class="form-select fw-bold" id="staffSelect" onchange="loadStaffPerformance()">
-                            <option value="">-- 請選擇負責人 --</option>
-                            <option value="張經理">張經理</option>
-                            <option value="李專員">李專員</option>
-                            <option value="王助理">王助理</option>
+                         <option value="">-- 讀取業務名冊中... --</option>
                         </select>
                     </div>
                     <div class="col-md-8">
@@ -303,10 +300,39 @@
             if (sectionId === 'cross-selling') loadCrossSellingAnalysis();
             if (sectionId === 'crm') loadCRMData();
             if (sectionId === 'sales-kpi') {
-                // 切換過來時，如果還沒選人，重置診斷提示
                 document.getElementById('staffDebugErrorAlert').classList.add('d-none');
+                // 每次切換到業務考核頁面時，動態初始化或確保下拉選單是最新的
+                initStaffDropdown();
             }
             if (sectionId === 'raw-data') loadRawData('sales');
+        }
+
+        // 🎯 新增：自動對接資料庫真正人名的動態選單功能
+        function initStaffDropdown() {
+            const staffSelect = document.getElementById('staffSelect');
+            
+            // 如果已經載入過真正的人名（長度大於 2 代表已經不是只有預設選項），就不用重複撈取
+            if (staffSelect.options.length > 2) return;
+
+            fetch('/api/get-all-staffs')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) {
+                        staffSelect.innerHTML = `<option value="">❌ 載入失敗: ${data.error}</option>`;
+                        return;
+                    }
+                    
+                    let html = '<option value="">-- 請選擇負責人 --</option>';
+                    data.forEach(staff => {
+                        const name = staff.負責人姓名;
+                        html += `<option value="${name}">${name}</option>`;
+                    });
+                    staffSelect.innerHTML = html;
+                })
+                .catch(err => {
+                    console.error("無法動態載入負責人選單:", err);
+                    staffSelect.innerHTML = '<option value="">❌ 網路或 API 異常</option>';
+                });
         }
 
         function loadDashboard() {

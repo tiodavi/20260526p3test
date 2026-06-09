@@ -331,5 +331,25 @@ def get_customers():
     except Exception as e:
         return jsonify({"error": f"客戶資料失敗：{str(e)}"}), 500
 
+# 請將這段程式碼加在 app.py 的負責人 API 模組附近
+
+@app.route('/api/get-all-staffs')
+def get_all_staffs():
+    """動態撈取資料庫內所有真正的業務員名單"""
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                query = """
+                    SELECT DISTINCT "負責人姓名" 
+                    FROM "負責人清單" 
+                    WHERE "負責人姓名" IS NOT NULL AND "負責人姓名" <> ''
+                    ORDER BY "負責人姓名" ASC;
+                """
+                cur.execute(query)
+                results = cur.fetchall()
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": f"無法讀取業務負責人名冊：{str(e)}"}), 500
+
 if __name__ == '__main__':
     app.run(debug=True)
