@@ -21,11 +21,13 @@ def get_db_connection():
 # --- 核心路由：首頁渲染 ---
 @app.route('/')
 def index():
+    # Flask 會自動去與 app.py 同層的 templates/ 資料夾尋找 index.html
     return render_template('index.html')
 
-# --- 🚀 熱門組合商品交叉銷售分析 API ---
+# --- 🚀 修正版：熱門組合商品交叉銷售分析 API ---
 @app.route('/api/cross-selling-analysis')
 def get_cross_selling_analysis():
+    """API: 輸入基準商品ID，找出買過該商品的客群，還買了哪些「其他商品」的排名累計"""
     target_product_id = request.args.get('target_product_id')
     if not target_product_id:
         return jsonify({"error": "請提供基準商品 ID (?target_product_id=X)"}), 400
@@ -58,6 +60,7 @@ def get_cross_selling_analysis():
 # --- 📦 特定產品線/群組銷貨營運分析 ---
 @app.route('/api/sales-by-group')
 def get_sales_by_group():
+    """API: 特定群組產品銷貨表現，依據數量從大到小排序"""
     group_name = request.args.get('group_name')
     if not group_name:
         return jsonify({"error": "請提供商品群組名稱"}), 400
@@ -148,6 +151,7 @@ def get_customer_preference_by_staff():
                     GROUP BY c."顧客名稱", p."群組名稱"
                     ORDER BY "貢獻預算總額" DESC;
                 """
+                    # 修正：補回漏掉的 GROUP BY
                 cur.execute(query, (staff_name,))
                 results = cur.fetchall()
         return jsonify(results)
@@ -157,6 +161,7 @@ def get_customer_preference_by_staff():
 # --- 🎯 CRM 精準行銷模組 API ---
 @app.route('/api/customer-footprint')
 def get_customer_footprint():
+    """API: 客戶消費足跡追蹤表"""
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -175,6 +180,7 @@ def get_customer_footprint():
 
 @app.route('/api/sleeping-members')
 def get_sleeping_members():
+    """API: 零消費沉睡會員名單"""
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -193,6 +199,7 @@ def get_sleeping_members():
 
 @app.route('/api/dead-products')
 def get_dead_products():
+    """API: 從未被購買的滯銷商品"""
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -212,6 +219,7 @@ def get_dead_products():
 # --- 🏆 業務英雄榜名次表 API ---
 @app.route('/api/sales-ranking')
 def get_sales_ranking():
+    """API: 統計全體業務員(負責人)的累積銷售總額與實質創造毛利，並由大到小排序"""
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -271,6 +279,7 @@ def get_sales_by_date():
 # --- 📊 儀表板綜合統計數據 API ---
 @app.route('/api/dashboard-stats')
 def get_dashboard_stats():
+    """API: 儀表板全域 KPI 與圖表共用數據集"""
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -362,7 +371,7 @@ def get_products():
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute('SELECT \"商品ID\" AS \"商品id\", \"商品名稱\", \"群組名稱\", \"進貨單價\", \"販賣單價\" FROM \"商品清單\" ORDER BY \"商品ID\";')
+                cur.execute('SELECT "商品ID" AS "商品id", "商品名稱", "群組名稱", "進貨單價", "販賣單價" FROM "商品清單" ORDER BY "商品ID";')
                 results = cur.fetchall()
         return jsonify(results)
     except Exception as e:
@@ -373,7 +382,7 @@ def get_customers():
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute('SELECT \"顧客ID\" AS \"顧客id\", \"顧客名稱\", \"聯絡電話\" FROM \"顧客清單\" ORDER BY \"顧客ID\";')
+                cur.execute('SELECT "顧客ID" AS "顧客id", "顧客名稱", "聯絡電話" FROM "顧客清單" ORDER BY "顧客ID";')
                 results = cur.fetchall()
         return jsonify(results)
     except Exception as e:
