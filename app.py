@@ -18,7 +18,7 @@ def index():
     return render_template('index.html')
 
 # ==========================================
-# 🎖️ 負責人績效考核與偏好追蹤 API 模組 (加強防錯 + 全社平均對比版)
+# 🎖️ 負責人績效考核與偏好追蹤 API 模組
 # ==========================================
 
 @app.route('/api/sales-detail-by-staff')
@@ -29,7 +29,6 @@ def get_sales_detail_by_staff():
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                # ✨ 功能三：在 SELECT 中加入子查詢，動態計算該商品在全公司的平均歷史購買量
                 query = """
                     SELECT 
                         s."傳票編號", 
@@ -55,7 +54,6 @@ def get_sales_detail_by_staff():
                 cur.execute(query, (staff_name,))
                 sales_detail = cur.fetchall()
                 
-                # 安全計算 KPI 總和
                 total_sales = 0
                 total_profit = 0
                 for row in sales_detail:
@@ -97,10 +95,8 @@ def get_customer_preference_by_staff():
     except Exception as e:
         return jsonify({"error": f"資料庫讀取負責人偏好地圖失敗：{str(e)}"}), 500
 
-# ✨ 功能一：新增尋找銷售冠軍（包含並列第一）的 API 路由
 @app.route('/api/top-sales-mvp')
 def get_top_sales_mvp():
-    """找出目前銷售總額最高的業務員（支援並列第一）"""
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -128,10 +124,8 @@ def get_top_sales_mvp():
     except Exception as e:
         return jsonify({"error": f"讀取銷售冠軍失敗：{str(e)}"}), 500
 
-# ✨ 功能二：新增過濾有消費紀錄客戶的 API 路由
 @app.route('/api/active-customers')
 def get_active_customers():
-    """使用 EXISTS 找出所有真正有過消費明細的黃金活躍客戶"""
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -154,8 +148,36 @@ def get_active_customers():
     except Exception as e:
         return jsonify({"error": f"讀取活躍會員失敗：{str(e)}"}), 500
 
+# ✨ 動態精準行銷功能：根據前端選定的群組名稱篩選買過的顧客
+@app.route('/api/customers-by-product-group')
+def get_customers_by_product_group():
+    group_name = request.args.get('group_name', '').strip()
+    if not group_name:
+        return jsonify({"error": "請選擇商品群組"}), 400
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                query = """
+                    SELECT
+                        c."顧客ID" AS "顧客id",
+                        c."顧客名稱",
+                        c."聯絡電話"
+                    FROM "顧客清單" AS c
+                    WHERE c."顧客ID" IN (
+                        SELECT s."顧客ID"
+                        FROM "販賣資料" AS s
+                        INNER JOIN "商品清單" AS p ON s."商品ID" = p."商品ID"
+                        WHERE p."群組名稱" = %s
+                    )
+                    ORDER BY c."顧客ID" ASC;
+                """
+                cur.execute(query, (group_name,))
+                results = cur.fetchall()
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": f"讀取特定商品群組客群失敗：{str(e)}"}), 500
 
-# --- 🚀 其他既有 API 模組保持完整運作 ---
+# --- 🚀 其他既有 API 模組 ---
 @app.route('/api/cross-selling-analysis')
 def get_cross_selling_analysis():
     target_product_id = request.args.get('target_product_id')

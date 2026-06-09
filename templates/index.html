@@ -28,7 +28,7 @@
     <div class="sidebar">
         <div class="px-3 mb-4 text-center">
             <h5 class="text-white fw-bold">3C 營運戰情室</h5>
-            <span class="badge bg-danger">v3.5 精準決策版</span>
+            <span class="badge bg-danger">v4.0 智慧聯動版</span>
         </div>
         <nav class="nav flex-column">
             <a class="nav-link active" href="#" id="link-dashboard" onclick="switchSection('dashboard')">📊 營運總覽儀表板</a>
@@ -149,12 +149,12 @@
                         <div class="input-group">
                             <span class="input-group-text bg-secondary text-white">商品 ID</span>
                             <input type="number" class="form-control" id="targetProductIdInput" value="1">
-                            <button class="btn btn-primary" onclick="loadCrossSellingAnalysis()">啟動關聯分析</button>
+                            <button class="btn btn-primary" onclick="loadCrossSellingAnalysis()">啟動關聯 analysis</button>
                         </div>
                     </div>
                     <div class="col-md-7">
                         <div class="p-3 bg-light rounded text-secondary" style="font-size: 0.9rem;">
-                            💡 <strong>交叉銷售演算法：</strong>系統會自動搜尋出買過該基準商品的所有客群，並統計 these 人還買了哪些其他商品。
+                            💡 <strong>交叉銷售演算法：</strong>系統會自動搜尋出買過該基準商品的所有客群，並統計這些人還買了哪些其他商品。
                         </div>
                     </div>
                 </div>
@@ -180,8 +180,25 @@
 
         <div id="crm" class="section-panel">
             <h2 class="mb-4 fw-bold text-dark">🎯 CRM 精準行銷模組</h2>
+            
+            <div class="card p-4 mb-4">
+                <div class="row align-items-center">
+                    <div class="col-md-5">
+                        <label class="form-label fw-bold text-success">🎯 請選擇欲進行精準行銷的商品群組：</label>
+                        <select class="form-select fw-bold border-success" id="crmGroupSelect" onchange="loadCustomersByGroup()">
+                            <option value="">-- 正在讀取資料庫商品群組... --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-7">
+                        <div class="p-3 bg-light rounded text-secondary" style="font-size: 0.9rem;">
+                            💡 <strong>智慧精準分流：</strong>此群組完全從資料庫商品主檔即時撈取，切換選單會以 IN 子查詢動態過濾出目標受眾。
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="row">
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <div class="card p-4">
                         <h5 class="card-title fw-bold text-danger">⚠️ 零消費沉睡會員名單</h5>
                         <div class="table-responsive">
@@ -192,18 +209,34 @@
                         </div>
                     </div>
                 </div>
-                <div class="col-md-6">
+                
+                <div class="col-md-4">
                     <div class="card p-4">
-                        <h5 class="card-title fw-bold text-success">✨ 曾消費活躍會員名單 (簡訊精準行銷)</h5>
+                        <h5 class="card-title fw-bold text-primary">✨ 全體不限品類活躍會員</h5>
                         <div class="table-responsive">
                             <table class="table table-striped" id="activeCustomersTable">
-                                <thead class="table-success"><tr><th>顧客ID</th><th>顧客名稱</th><th>聯絡電話</th></tr></thead>
+                                <thead class="table-primary"><tr><th>顧客ID</th><th>顧客名稱</th><th>聯絡電話</th></tr></thead>
                                 <tbody></tbody>
                             </table>
                         </div>
                     </div>
                 </div>
+
+                <div class="col-md-4">
+                    <div class="card p-4 border-success">
+                        <h5 class="card-title fw-bold text-success" id="crmGroupTitle">🎯 精準行銷名單</h5>
+                        <div class="table-responsive">
+                            <table class="table table-striped" id="groupCustomersTable">
+                                <thead class="table-success"><tr><th>顧客ID</th><th>顧客名稱</th><th>聯絡電話</th></tr></thead>
+                                <tbody>
+                                    <tr><td colspan="3" class="text-center text-muted">請先選擇群組</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
             </div>
+
             <div class="card p-4 mt-3">
                 <h5 class="card-title fw-bold text-primary">👣 全體客戶消費足跡追蹤表</h5>
                 <div class="table-responsive">
@@ -293,6 +326,15 @@
         let chartCustomersInstance = null;
         let chartSalesRankingInstance = null;
 
+        // 幫常見商品群組定義圖標的小字典
+        const groupEmojis = {
+            "網路設備": "🌐",
+            "電腦主機": "💻",
+            "周邊配件": "🖱️",
+            "手機": "📱",
+            "家電": "📺"
+        };
+
         function switchSection(sectionId) {
             document.querySelectorAll('.section-panel').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.sidebar .nav-link').forEach(el => el.classList.remove('active'));
@@ -309,6 +351,35 @@
                 initStaffDropdown();
             }
             if (sectionId === 'raw-data') loadRawData('sales');
+        }
+
+        // ✨ 全新優化：動態讀取商品主檔，智慧提取所有的商品群組來渲染下拉選單
+        function initCrmGroupDropdown() {
+            const selectEl = document.getElementById('crmGroupSelect');
+            
+            // 如果已經加載過選項，則不重複發送請求
+            if (selectEl.options.length > 1) return Promise.resolve();
+
+            return fetch('/api/products')
+                .then(res => res.json())
+                .then(products => {
+                    if (products.error) throw new Error(products.error);
+                    
+                    // 利用 Set 來快速過濾出不重複的群組名稱
+                    const groups = [...new Set(products.map(p => p.群組名稱))].filter(g => g);
+                    
+                    let html = '';
+                    groups.forEach((group, idx) => {
+                        const emoji = groupEmojis[group] || "📦";
+                        html += `<option value="${group}" ${idx === 0 ? 'selected' : ''}>${emoji} ${group} 精準客群</option>`;
+                    });
+                    
+                    selectEl.innerHTML = html;
+                })
+                .catch(err => {
+                    console.error("初始化商品群組失敗:", err);
+                    selectEl.innerHTML = '<option value="">❌ 無法載入商品群組</option>';
+                });
         }
 
         function initStaffDropdown() {
@@ -336,7 +407,6 @@
         }
 
         function loadDashboard() {
-            // ✨ 功能一：在儀表板頂端異步讀取最高銷售 MVP 金榜
             fetch('/api/top-sales-mvp')
                 .then(res => res.json())
                 .then(mvpData => {
@@ -411,7 +481,7 @@
                     if (index === 0) medal = '🥇';
                     if (index === 1) medal = '🥈';
                     if (index === 2) medal = '🥉';
-                    tbody.innerHTML += `<tr><td class="text-center fw-bold">${medal}</td><td class="fw-bold">${row.業務員}</td><td class="text-center">${row.經手訂單數}</td><td class="text-primary fw-bold">$${Math.round(row.get_sales || row.總銷售業績).toLocaleString()}</td><td class="text-success fw-bold">$${Math.round(row.創造總毛利).toLocaleString()}</td></tr>`;
+                    tbody.innerHTML += `<tr><td class="text-center fw-bold">${medal}</td><td class="fw-bold">${row.業務員}</td><td class="text-center">${row.經手訂單數}</td><td class="text-primary fw-bold">$${Math.round(row.總銷售業績).toLocaleString()}</td><td class="text-success fw-bold">$${Math.round(row.創造總毛利).toLocaleString()}</td></tr>`;
                 });
             });
         }
@@ -430,17 +500,12 @@
 
             debugAlert.classList.add('d-none');
 
-            // 1. 撈取明細與全社大盤數量平均值
             fetch(`/api/sales-detail-by-staff?staff_name=${encodeURIComponent(staffName)}`)
                 .then(res => {
-                    if (!res.ok) {
-                        return res.json().then(errData => { throw new Error(errData.error || `HTTP 錯誤 ${res.status}`); });
-                    }
+                    if (!res.ok) return res.json().then(errData => { throw new Error(errData.error); });
                     return res.json();
                 })
                 .then(data => {
-                    if (data.error) throw new Error(data.error);
-
                     const summary = data.summary || { total_sales: 0, total_profit: 0 };
                     document.getElementById('staffKpiSummary').innerHTML = `
                         <div class="col-6"><div class="bg-primary text-white p-3 rounded"><h6>經手累積總銷售業績</h6><h4>$${Math.round(summary.total_sales).toLocaleString()}</h4></div></div>
@@ -451,7 +516,6 @@
                     if (!data.sales_detail || data.sales_detail.length === 0) {
                         detailBody.innerHTML = `<tr><td colspan="9" class="text-center text-warning fw-bold">⚠ 資料庫查無【${staffName}】的任何銷售明細。</td></tr>`;
                     } else {
-                        // ✨ 功能三前端：動態渲染「全社平均數量」欄位
                         detailBody.innerHTML = data.sales_detail.map(row => `
                             <tr>
                                 <td><span class="badge bg-secondary">${row["傳票編號"] || '-'}</span></td>
@@ -468,23 +532,14 @@
                     }
                 })
                 .catch(err => {
-                    console.error(err);
                     debugAlert.classList.remove('d-none');
                     debugAlert.innerHTML = `❌ 明細模組讀取失敗！錯誤回報：<br>${err.message}`;
                 });
 
-            // 2. 抓取客戶採購偏好
             fetch(`/api/customer-preference-by-staff?staff_name=${encodeURIComponent(staffName)}`)
-                .then(res => {
-                    if (!res.ok) throw new Error(`HTTP 錯誤 ${res.status}`);
-                    return res.json();
-                })
+                .then(res => res.json())
                 .then(data => {
                     const prefBody = document.querySelector('#staffPreferenceTable tbody');
-                    if (data.error) {
-                        prefBody.innerHTML = `<tr><td colspan="4" class="text-danger fw-bold">${data.error}</td></tr>`;
-                        return;
-                    }
                     if (!data || data.length === 0) {
                         prefBody.innerHTML = `<tr><td colspan="4" class="text-center text-muted">暫無客戶偏好地圖數據</td></tr>`;
                     } else {
@@ -497,28 +552,18 @@
                             </tr>
                         `).join('');
                     }
-                })
-                .catch(err => {
-                    console.error(err);
-                    debugAlert.classList.remove('d-none');
-                    debugAlert.innerHTML += `<br><br>❌ 偏好模型讀取失敗！錯誤回報：<br>${err.message}`;
                 });
         }
 
         function loadCRMData() {
+            // 先獲取沉睡會員與基本足跡
             fetch('/api/sleeping-members').then(res=>res.json()).then(data=>{
                 document.getElementById('sleepingTable').querySelector('tbody').innerHTML = data.map(r=>`<tr><td>${r.顧客id}</td><td class="fw-bold">${r.顧客名稱}</td><td>${r.聯絡電話||'無'}</td></tr>`).join('');
             });
             
-            // ✨ 功能二前端：動態撈取並渲染有過消費紀錄的活躍黃金會員
             fetch('/api/active-customers').then(res=>res.json()).then(data=>{
                 const tbody = document.getElementById('activeCustomersTable').querySelector('tbody');
-                if(data.error) { tbody.innerHTML=`<tr><td colspan="3" class="text-danger">${data.error}</td></tr>`; return; }
-                tbody.innerHTML = data.map(r=>`<tr><td>${r.顧客id}</td><td class="fw-bold text-success">${r.顧客名稱}</td><td>${r.聯絡電話||'無'}</td></tr>`).join('');
-            }).catch(e=>console.error(e));
-
-            fetch('/api/dead-products').then(res=>res.json()).then(data=>{
-                document.getElementById('deadProductsTable').querySelector('tbody').innerHTML = data.map(r=>`<tr><td>${r.商品id}</td><td class="fw-bold text-danger">${r.商品名稱}</td><td><span class="badge bg-secondary">${r.群組名稱}</span></td></tr>`).join('');
+                tbody.innerHTML = data.map(r=>`<tr><td>${r.顧客id}</td><td class="fw-bold text-primary">${r.顧客名稱}</td><td>${r.聯絡電話||'無'}</td></tr>`).join('');
             });
 
             fetch('/api/customer-footprint').then(res=>res.json()).then(data=>{
@@ -530,6 +575,45 @@
                     </tr>
                 `).join('');
             });
+
+            // ✨ 先執行下拉選單動態初始化，加載完成後再觸發第一次的群組過濾
+            initCrmGroupDropdown().then(() => {
+                loadCustomersByGroup();
+            });
+        }
+
+        // ✨ 智慧連動過濾：不寫死任何群組，完全跟隨選單狀態發送帶有群組特徵的 SQL 查詢
+        function loadCustomersByGroup() {
+            const selectedGroup = document.getElementById('crmGroupSelect').value;
+            if (!selectedGroup) return;
+            
+            document.getElementById('crmGroupTitle').innerText = `🎯 【${selectedGroup}】精準行銷名單`;
+            
+            const tbody = document.getElementById('groupCustomersTable').querySelector('tbody');
+            tbody.innerHTML = `<tr><td colspan="3" class="text-center text-muted">正在精準計算【${selectedGroup}】客群中...</td></tr>`;
+
+            fetch(`/api/customers-by-product-group?group_name=${encodeURIComponent(selectedGroup)}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) {
+                        tbody.innerHTML = `<tr><td colspan="3" class="text-danger fw-bold">${data.error}</td></tr>`;
+                        return;
+                    }
+                    if (data.length === 0) {
+                        tbody.innerHTML = `<tr><td colspan="3" class="text-center text-warning fw-bold">⚠ 暫無任何客戶購買過此品類。</td></tr>`;
+                        return;
+                    }
+                    tbody.innerHTML = data.map(r => `
+                        <tr>
+                            <td>${r.顧客id}</td>
+                            <td class="fw-bold text-success">${r.顧客名稱}</td>
+                            <td>${r.聯絡電話 || '無'}</td>
+                        </tr>
+                    `).join('');
+                })
+                .catch(err => {
+                    tbody.innerHTML = `<tr><td colspan="3" class="text-danger">❌ 網路連線或 API 異常</td></tr>`;
+                });
         }
 
         function loadProductLineAnalysis() {
