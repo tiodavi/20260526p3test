@@ -16,7 +16,17 @@
         .kpi-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
         .kpi-card-2 { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white; }
         .kpi-card-3 { background: linear-gradient(135deg, #ff9966 0%, #ff5e62 100%); color: white; }
-        .mvp-card { background: linear-gradient(135deg, #f6d365 0%, #fda085 100%); color: #4a2f0f; border: 2px solid #ffc107; }
+        .mvp-card { background: linear-gradient(135deg, #f6d365 0%, #fda085 100%); color: #4a2f0f; border: 2px solid #ffc107; height: 100%; }
+        
+        /* ✨ 新增：黃金品類警示燈專用樣式 */
+        .premium-card { background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); color: #0369a1; border: 2px solid #38bdf8; height: 100%; }
+        .status-light { width: 12px; height: 12px; background-color: #22c55e; border-radius: 50%; display: inline-block; box-shadow: 0 0 8px #22c55e; animation: pulse-green 2s infinite; }
+        @keyframes pulse-green {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+        }
+
         .table-responsive { max-height: 400px; overflow-y: auto; }
         .section-panel { display: none; }
         .section-panel.active { display: block; }
@@ -28,7 +38,7 @@
     <div class="sidebar">
         <div class="px-3 mb-4 text-center">
             <h5 class="text-white fw-bold">3C 營運戰情室</h5>
-            <span class="badge bg-danger">v4.1 交叉智慧版</span>
+            <span class="badge bg-danger">v4.2 營運智慧版</span>
         </div>
         <nav class="nav flex-column">
             <a class="nav-link active" href="#" id="link-dashboard" onclick="switchSection('dashboard')">📊 營運總覽儀表板</a>
@@ -43,9 +53,12 @@
     <div class="main-content">
         
         <div id="dashboard" class="section-panel active">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <h2 class="fw-bold text-dark mb-0">📊 營運總覽儀表板</h2>
-                <div id="mvp-banner-container" style="min-width: 320px;"></div>
+            <div class="row align-items-stretch mb-4">
+                <div class="col-md-4">
+                    <h2 class="fw-bold text-dark mb-0 py-2">📊 營運總覽儀表板</h2>
+                </div>
+                <div class="col-md-4" id="mvp-banner-container"></div>
+                <div class="col-md-4" id="premium-banner-container"></div>
             </div>
             
             <div class="row" id="kpi-container">
@@ -354,7 +367,6 @@
                 });
         }
 
-        // ✨ 新增優化：動態讀取所有真實商品，渲染組合商品分析的「基準商品」選單
         function initProductIdDropdown() {
             const selectEl = document.getElementById('targetProductIdSelect');
             if (selectEl.options.length > 1) return Promise.resolve();
@@ -367,7 +379,6 @@
                     let html = '';
                     products.forEach((product, idx) => {
                         const emoji = groupEmojis[product.群組名稱] || "📦";
-                        // value 使用商品id，顯示則用群組與名稱組合，方便操作
                         html += `<option value="${product.商品id}" ${idx === 0 ? 'selected' : ''}>${emoji} [${product.群組名稱}] ${product.商品名稱}</option>`;
                     });
                     selectEl.innerHTML = html;
@@ -386,7 +397,7 @@
                 .then(res => res.json())
                 .then(products => {
                     if (products.error) throw new Error(products.error);
-                    const groups = [...new Set(products.map(p => p.群組名稱))].filter(g => g);
+                    const groups = [...new Set(groups = products.map(p => p.群組名稱))].filter(g => g);
                     
                     let html = '';
                     groups.forEach((group, idx) => {
@@ -438,14 +449,11 @@
                     loadProductLineAnalysis();
                 });
             }
-            
-            // ✨ 修改此處：切換到交叉銷售分析時，先連動撈取所有真實商品，再自動做第一次推薦載入
             if (sectionId === 'cross-selling') {
                 initProductIdDropdown().then(() => {
                     loadCrossSellingAnalysis();
                 });
             }
-            
             if (sectionId === 'crm') loadCRMData();
             if (sectionId === 'sales-kpi') {
                 document.getElementById('staffDebugErrorAlert').classList.add('d-none');
@@ -455,6 +463,7 @@
         }
 
         function loadDashboard() {
+            // 載入銷售 MVP 看板
             fetch('/api/top-sales-mvp')
                 .then(res => res.json())
                 .then(mvpData => {
@@ -469,8 +478,34 @@
                         <div class="card px-3 py-2 m-0 mvp-card d-flex flex-row align-items-center gap-2">
                             <span style="font-size: 1.5rem;">👑</span>
                             <div>
-                                <small class="fw-bold text-uppercase d-block" style="font-size: 0.75rem; letter-spacing: 1px;">全社銷售冠軍 MVP</small>
-                                <strong style="font-size: 1.05rem;">${names} ($${totalSales})</strong>
+                                <small class="fw-bold text-uppercase d-block" style="font-size: 0.72rem; letter-spacing: 1px;">全社銷售冠軍 MVP</small>
+                                <strong style="font-size: 1.02rem;">${names} ($${totalSales})</strong>
+                            </div>
+                        </div>
+                    `;
+                }).catch(e => console.error(e));
+
+            // ✨ 新增：非同步加載黃金品類警示燈看板
+            fetch('/api/premium-groups')
+                .then(res => res.json())
+                .then(premiumData => {
+                    const container = document.getElementById('premium-banner-container');
+                    if (premiumData.error || !premiumData || premiumData.length === 0) {
+                        container.innerHTML = '';
+                        return;
+                    }
+                    // 串接所有高於平均線的品類名稱與其 Emoji
+                    const badgesHtml = premiumData.map(item => {
+                        const emoji = groupEmojis[item.群組名稱] || "📦";
+                        return `<span class="badge bg-white text-dark border me-1">${emoji} ${item.群組名稱}</span>`;
+                    }).join('');
+
+                    container.innerHTML = `
+                        <div class="card px-3 py-2 m-0 premium-card d-flex flex-row align-items-center gap-2">
+                            <div class="status-light"></div>
+                            <div>
+                                <small class="fw-bold text-uppercase d-block mb-1" style="font-size: 0.72rem; letter-spacing: 1px;">🔥 黃金主力品類 (高於業績平均線)</small>
+                                <div class="d-flex flex-wrap gap-1">${badgesHtml}</div>
                             </div>
                         </div>
                     `;
@@ -696,7 +731,6 @@
                 });
         }
 
-        // ✨ 修改此處：改由下拉選單抓取真正的商品 ID 發送請求
         function loadCrossSellingAnalysis() {
             const targetId = document.getElementById('targetProductIdSelect').value;
             if (!targetId) return;

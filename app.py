@@ -18,6 +18,42 @@ def index():
     return render_template('index.html')
 
 # ==========================================
+# ✨ 新增：黃金品類警示燈 API 模組 (高於平均營收線)
+# ==========================================
+@app.route('/api/premium-groups')
+def get_premium_groups():
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                query = """
+                    SELECT
+                        p."群組名稱",
+                        SUM(p."販賣單價" * s."數量") AS "銷售總額"
+                    FROM "販賣資料" AS s
+                    INNER JOIN "商品清單" AS p
+                        ON s."商品ID" = p."商品ID"
+                    GROUP BY p."群組名稱"
+                    HAVING SUM(p."販賣單價" * s."數量") >= (
+                        SELECT AVG(sub."銷售總額")
+                        FROM (
+                            SELECT
+                                p2."群組名稱",
+                                SUM(p2."販賣單價" * s2."數量") AS "銷售總額"
+                            FROM "販賣資料" AS s2
+                            INNER JOIN "商品清單" AS p2
+                                ON s2."商品ID" = p2."商品ID"
+                            GROUP BY p2."群組名稱"
+                        ) AS sub
+                    )
+                    ORDER BY "銷售總額" DESC;
+                """
+                cur.execute(query)
+                results = cur.fetchall()
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": f"讀取黃金品類數據失敗：{str(e)}"}), 500
+
+# ==========================================
 # 🎖️ 負責人績效考核與偏好追蹤 API 模組
 # ==========================================
 
@@ -176,14 +212,12 @@ def get_customers_by_product_group():
     except Exception as e:
         return jsonify({"error": f"讀取特定商品群組客群失敗：{str(e)}"}), 500
 
-# --- 🚀 交叉銷售分析 API 模組（支援選單串接） ---
 @app.route('/api/cross-selling-analysis')
 def get_cross_selling_analysis():
     target_product_id = request.args.get('target_product_id')
     if not target_product_id:
         return jsonify({"error": "請提供基準商品 ID"}), 400
     try:
-        # ✨ 安全防護：將傳入的參數轉為 int 型態避免型態不匹配
         pid = int(target_product_id)
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
