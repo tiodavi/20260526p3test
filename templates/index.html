@@ -18,7 +18,7 @@
         .kpi-card-3 { background: linear-gradient(135deg, #ff9966 0%, #ff5e62 100%); color: white; }
         .mvp-card { background: linear-gradient(135deg, #f6d365 0%, #fda085 100%); color: #4a2f0f; border: 2px solid #ffc107; height: 100%; }
         
-        /* ✨ 新增：黃金品類警示燈專用樣式 */
+        /* ✨ 更新：黃金主力商品專用樣式與 Pulse 動畫 */
         .premium-card { background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); color: #0369a1; border: 2px solid #38bdf8; height: 100%; }
         .status-light { width: 12px; height: 12px; background-color: #22c55e; border-radius: 50%; display: inline-block; box-shadow: 0 0 8px #22c55e; animation: pulse-green 2s infinite; }
         @keyframes pulse-green {
@@ -397,7 +397,7 @@
                 .then(res => res.json())
                 .then(products => {
                     if (products.error) throw new Error(products.error);
-                    const groups = [...new Set(groups = products.map(p => p.群組名稱))].filter(g => g);
+                    const groups = [...new Set(products.map(p => p.群組名稱))].filter(g => g);
                     
                     let html = '';
                     groups.forEach((group, idx) => {
@@ -485,7 +485,7 @@
                     `;
                 }).catch(e => console.error(e));
 
-            // ✨ 新增：非同步加載黃金品類警示燈看板
+            // ✨ 修改：非同步加載黃金「商品名稱」警示燈看板
             fetch('/api/premium-groups')
                 .then(res => res.json())
                 .then(premiumData => {
@@ -494,18 +494,18 @@
                         container.innerHTML = '';
                         return;
                     }
-                    // 串接所有高於平均線的品類名稱與其 Emoji
+                    // 串接所有高於單品平均線的商品名稱與其對應群組的 Emoji
                     const badgesHtml = premiumData.map(item => {
                         const emoji = groupEmojis[item.群組名稱] || "📦";
-                        return `<span class="badge bg-white text-dark border me-1">${emoji} ${item.群組名稱}</span>`;
+                        return `<span class="badge bg-white text-dark border me-1 my-1">${emoji} ${item.商品名稱}</span>`;
                     }).join('');
 
                     container.innerHTML = `
                         <div class="card px-3 py-2 m-0 premium-card d-flex flex-row align-items-center gap-2">
                             <div class="status-light"></div>
-                            <div>
-                                <small class="fw-bold text-uppercase d-block mb-1" style="font-size: 0.72rem; letter-spacing: 1px;">🔥 黃金主力品類 (高於業績平均線)</small>
-                                <div class="d-flex flex-wrap gap-1">${badgesHtml}</div>
+                            <div style="flex: 1;">
+                                <small class="fw-bold text-uppercase d-block mb-1" style="font-size: 0.72rem; letter-spacing: 1px;">🔥 黃金主力商品 (高於單品業績平均線)</small>
+                                <div class="d-flex flex-wrap align-items-center">${badgesHtml}</div>
                             </div>
                         </div>
                     `;

@@ -18,7 +18,7 @@ def index():
     return render_template('index.html')
 
 # ==========================================
-# ✨ 新增：黃金品類警示燈 API 模組 (高於平均營收線)
+# ✨ 修改：黃金商品警示燈 API 模組 (改為單品名稱，高於單品平均營收線)
 # ==========================================
 @app.route('/api/premium-groups')
 def get_premium_groups():
@@ -27,22 +27,24 @@ def get_premium_groups():
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 query = """
                     SELECT
+                        p."商品名稱",
                         p."群組名稱",
                         SUM(p."販賣單價" * s."數量") AS "銷售總額"
                     FROM "販賣資料" AS s
                     INNER JOIN "商品清單" AS p
                         ON s."商品ID" = p."商品ID"
-                    GROUP BY p."群組名稱"
+                    GROUP BY p."商品ID", p."商品名稱", p."群組名稱"
                     HAVING SUM(p."販賣單價" * s."數量") >= (
+                        -- 子查詢：算出「所有單品」的平均銷售額
                         SELECT AVG(sub."銷售總額")
                         FROM (
                             SELECT
-                                p2."群組名稱",
+                                p2."商品ID",
                                 SUM(p2."販賣單價" * s2."數量") AS "銷售總額"
                             FROM "販賣資料" AS s2
                             INNER JOIN "商品清單" AS p2
                                 ON s2."商品ID" = p2."商品ID"
-                            GROUP BY p2."群組名稱"
+                            GROUP BY p2."商品ID"
                         ) AS sub
                     )
                     ORDER BY "銷售總額" DESC;
@@ -51,7 +53,7 @@ def get_premium_groups():
                 results = cur.fetchall()
         return jsonify(results)
     except Exception as e:
-        return jsonify({"error": f"讀取黃金品類數據失敗：{str(e)}"}), 500
+        return jsonify({"error": f"讀取黃金商品數據失敗：{str(e)}"}), 500
 
 # ==========================================
 # 🎖️ 負責人績效考核與偏好追蹤 API 模組
