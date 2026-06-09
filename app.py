@@ -148,7 +148,6 @@ def get_active_customers():
     except Exception as e:
         return jsonify({"error": f"讀取活躍會員失敗：{str(e)}"}), 500
 
-# ✨ 動態精準行銷功能：根據前端選定的群組名稱篩選買過的顧客
 @app.route('/api/customers-by-product-group')
 def get_customers_by_product_group():
     group_name = request.args.get('group_name', '').strip()
@@ -177,13 +176,15 @@ def get_customers_by_product_group():
     except Exception as e:
         return jsonify({"error": f"讀取特定商品群組客群失敗：{str(e)}"}), 500
 
-# --- 🚀 其他既有 API 模組 ---
+# --- 🚀 交叉銷售分析 API 模組（支援選單串接） ---
 @app.route('/api/cross-selling-analysis')
 def get_cross_selling_analysis():
     target_product_id = request.args.get('target_product_id')
     if not target_product_id:
         return jsonify({"error": "請提供基準商品 ID"}), 400
     try:
+        # ✨ 安全防護：將傳入的參數轉為 int 型態避免型態不匹配
+        pid = int(target_product_id)
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 query = """
@@ -203,9 +204,11 @@ def get_cross_selling_analysis():
                     ORDER BY "購買客戶數" DESC, "交叉貢獻總金額" DESC
                     LIMIT 10;
                 """
-                cur.execute(query, (target_product_id, target_product_id))
+                cur.execute(query, (pid, pid))
                 results = cur.fetchall()
         return jsonify(results)
+    except ValueError:
+        return jsonify({"error": "不合法的商品 ID 格式"}), 400
     except Exception as e:
         return jsonify({"error": f"交叉銷售演算法執行失敗：{str(e)}"}), 500
 

@@ -28,7 +28,7 @@
     <div class="sidebar">
         <div class="px-3 mb-4 text-center">
             <h5 class="text-white fw-bold">3C 營運戰情室</h5>
-            <span class="badge bg-danger">v4.0 智慧聯動版</span>
+            <span class="badge bg-danger">v4.1 交叉智慧版</span>
         </div>
         <nav class="nav flex-column">
             <a class="nav-link active" href="#" id="link-dashboard" onclick="switchSection('dashboard')">📊 營運總覽儀表板</a>
@@ -140,17 +140,15 @@
             <h2 class="mb-4 fw-bold text-dark">🤝 熱門組合商品交叉銷售分析 (Cross-Selling)</h2>
             <div class="card p-4 mb-4">
                 <div class="row align-items-center">
-                    <div class="col-md-5">
-                        <label class="form-label fw-bold">請輸入基準商品 ID：</label>
-                        <div class="input-group">
-                            <span class="input-group-text bg-secondary text-white">商品 ID</span>
-                            <input type="number" class="form-control" id="targetProductIdInput" value="1">
-                            <button class="btn btn-primary" onclick="loadCrossSellingAnalysis()">啟動關聯 analysis</button>
-                        </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold text-primary">🎯 請選擇基準分析商品：</label>
+                        <select class="form-select fw-bold border-primary" id="targetProductIdSelect" onchange="loadCrossSellingAnalysis()">
+                            <option value="">-- 正在載入資料庫商品主檔... --</option>
+                        </select>
                     </div>
-                    <div class="col-md-7">
+                    <div class="col-md-6">
                         <div class="p-3 bg-light rounded text-secondary" style="font-size: 0.9rem;">
-                            💡 <strong>交叉銷售演算法：</strong>系統會自動搜尋出買過該基準商品的所有客群，並統計 these 人還買了哪些其他商品。
+                            💡 <strong>交叉銷售演算法：</strong>系統會自動搜尋買過該基準商品的所有客群，並統計<strong>這些人還買了哪些其他關聯商品</strong>，精準推薦加購組合。
                         </div>
                     </div>
                 </div>
@@ -168,7 +166,9 @@
                                 <th>交叉銷售貢獻總金額</th>
                             </tr>
                         </thead>
-                        <tbody></tbody>
+                        <tbody>
+                            <tr><td colspan="5" class="text-center text-muted">請先由上方選單選取基準商品</td></tr>
+                        </tbody>
                     </table>
                 </div>
             </div>
@@ -322,7 +322,6 @@
         let chartCustomersInstance = null;
         let chartSalesRankingInstance = null;
 
-        // 幫常見商品群組定義圖標的小字典
         const groupEmojis = {
             "網路設備": "🌐",
             "電腦主機": "💻",
@@ -331,19 +330,14 @@
             "家電": "📺"
         };
 
-        // ✨ 新增優化：動態讀取商品主檔，智慧提取所有的商品群組來渲染「銷貨營運分析」下拉選單
         function initProductGroupDropdown() {
             const selectEl = document.getElementById('groupSelect');
-            
-            // 如果已經加載過選項（長度大於 1），則不重複發送請求
             if (selectEl.options.length > 1) return Promise.resolve();
 
             return fetch('/api/products')
                 .then(res => res.json())
                 .then(products => {
                     if (products.error) throw new Error(products.error);
-                    
-                    // 利用 Set 來快速過濾出不重複的群組名稱
                     const groups = [...new Set(products.map(p => p.群組名稱))].filter(g => g);
                     
                     let html = '';
@@ -351,10 +345,7 @@
                         const emoji = groupEmojis[group] || "📦";
                         html += `<option value="${group}" ${idx === 0 ? 'selected' : ''}>${emoji} ${group}</option>`;
                     });
-                    
-                    // 保留原本查看全部的選項
                     html += `<option value="ALL">🔍 查看全品線大宗掃貨排行</option>`;
-                    
                     selectEl.innerHTML = html;
                 })
                 .catch(err => {
@@ -363,10 +354,9 @@
                 });
         }
 
-        // 動態讀取商品主檔，智慧提取所有的商品群組來渲染「CRM 精準行銷」下拉選單
-        function initCrmGroupDropdown() {
-            const selectEl = document.getElementById('crmGroupSelect');
-            
+        // ✨ 新增優化：動態讀取所有真實商品，渲染組合商品分析的「基準商品」選單
+        function initProductIdDropdown() {
+            const selectEl = document.getElementById('targetProductIdSelect');
             if (selectEl.options.length > 1) return Promise.resolve();
 
             return fetch('/api/products')
@@ -374,6 +364,28 @@
                 .then(products => {
                     if (products.error) throw new Error(products.error);
                     
+                    let html = '';
+                    products.forEach((product, idx) => {
+                        const emoji = groupEmojis[product.群組名稱] || "📦";
+                        // value 使用商品id，顯示則用群組與名稱組合，方便操作
+                        html += `<option value="${product.商品id}" ${idx === 0 ? 'selected' : ''}>${emoji} [${product.群組名稱}] ${product.商品名稱}</option>`;
+                    });
+                    selectEl.innerHTML = html;
+                })
+                .catch(err => {
+                    console.error("初始化交叉銷售商品選單失敗:", err);
+                    selectEl.innerHTML = '<option value="">❌ 無法載入商品主檔</option>';
+                });
+        }
+
+        function initCrmGroupDropdown() {
+            const selectEl = document.getElementById('crmGroupSelect');
+            if (selectEl.options.length > 1) return Promise.resolve();
+
+            return fetch('/api/products')
+                .then(res => res.json())
+                .then(products => {
+                    if (products.error) throw new Error(products.error);
                     const groups = [...new Set(products.map(p => p.群組名稱))].filter(g => g);
                     
                     let html = '';
@@ -381,7 +393,6 @@
                         const emoji = groupEmojis[group] || "📦";
                         html += `<option value="${group}" ${idx === 0 ? 'selected' : ''}>${emoji} ${group} 精準客群</option>`;
                     });
-                    
                     selectEl.innerHTML = html;
                 })
                 .catch(err => {
@@ -422,15 +433,19 @@
             document.getElementById(`link-${sectionId}`).classList.add('active');
             
             if (sectionId === 'dashboard') loadDashboard();
-            
-            // ✨ 修改此處：切換到產品線分析分頁時，先動態加載選單，完成後再執行第一次查詢
             if (sectionId === 'product-line') {
                 initProductGroupDropdown().then(() => {
                     loadProductLineAnalysis();
                 });
             }
             
-            if (sectionId === 'cross-selling') loadCrossSellingAnalysis();
+            // ✨ 修改此處：切換到交叉銷售分析時，先連動撈取所有真實商品，再自動做第一次推薦載入
+            if (sectionId === 'cross-selling') {
+                initProductIdDropdown().then(() => {
+                    loadCrossSellingAnalysis();
+                });
+            }
+            
             if (sectionId === 'crm') loadCRMData();
             if (sectionId === 'sales-kpi') {
                 document.getElementById('staffDebugErrorAlert').classList.add('d-none');
@@ -648,7 +663,7 @@
 
         function loadProductLineAnalysis() {
             const groupName = document.getElementById('groupSelect').value;
-            if (!groupName) return; // 防呆處理
+            if (!groupName) return;
 
             document.getElementById('productLineTitle').innerText = `📊 【${groupName}】產品線銷貨營運明細`;
             
@@ -681,13 +696,25 @@
                 });
         }
 
+        // ✨ 修改此處：改由下拉選單抓取真正的商品 ID 發送請求
         function loadCrossSellingAnalysis() {
-            const targetId = document.getElementById('targetProductIdInput').value;
+            const targetId = document.getElementById('targetProductIdSelect').value;
+            if (!targetId) return;
+
+            const tbody = document.querySelector('#crossSellingTable tbody');
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">系統交叉演算關聯中...</td></tr>';
+
             fetch(`/api/cross-selling-analysis?target_product_id=${targetId}`)
                 .then(res => res.json())
                 .then(data => {
-                    const tbody = document.querySelector('#crossSellingTable tbody');
-                    if(data.length===0) { tbody.innerHTML='<tr><td colspan="5" class="text-center">暫無數據</td></tr>'; return;}
+                    if (data.error) {
+                        tbody.innerHTML = `<tr><td colspan="5" class="text-danger text-center fw-bold">${data.error}</td></tr>`;
+                        return;
+                    }
+                    if (data.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-warning fw-bold">⚠ 資料庫中無與此商品共同購買的其他紀錄</td></tr>'; 
+                        return;
+                    }
                     tbody.innerHTML = data.map(row => `
                         <tr>
                             <td class="fw-bold">🎁 加購推薦：${row.商品名稱}</td>
@@ -697,6 +724,9 @@
                             <td class="fw-bold text-success">$${Number(row.交叉貢獻總金額).toLocaleString()}</td>
                         </tr>
                     `).join('');
+                })
+                .catch(err => {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-danger text-center fw-bold">❌ 載入關聯分析失敗</td></tr>';
                 });
         }
 
